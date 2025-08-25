@@ -11,7 +11,8 @@ requires-python = ">=3.10"
 dependencies = [
   "websockets>=12,<13",
   "pydantic>=2,<3",
-  "numpy>=1.26,<2"
+  "numpy>=1.26,<2",
+  "pywebview>=5.0,<6"
 ]
 
 # optional extras you can install later: pip install -e ".[neon]"
