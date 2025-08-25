@@ -166,7 +166,7 @@ class GazedeckAPI:
             return {"success": False, "message": f"Error saving PNG markers: {str(e)}"}
     
     def save_all_markers_with_pdf(self):
-        """Save all markers as PNGs and create a PDF sheet for printing"""
+        """Create PDF sheet for printing (no individual PNGs)"""
         try:
             from pathlib import Path
             from .apriltag_generator import apriltag_generator
@@ -178,13 +178,13 @@ class GazedeckAPI:
             
             output_dir = downloads_path / "GazeDeck_AprilTags_Print"
             
-            # Save all markers and create PDF
-            result = apriltag_generator.save_all_markers(output_dir, create_pdf=True)
+            # Create PDF only (no individual PNGs)
+            result = apriltag_generator.create_pdf_only(output_dir)
             
             return result
             
         except Exception as e:
-            return {"success": False, "message": f"Error saving markers with PDF: {str(e)}"}
+            return {"success": False, "message": f"Error creating PDF: {str(e)}"}
     
     def disconnect_pupil_device(self):
         """Disconnect from Pupil Labs device"""
@@ -213,250 +213,302 @@ def get_html_content():
         <title>GazeDeck Control Panel</title>
         <style>
             body {
-                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                font-size: 14px;
+                line-height: 1.5;
                 margin: 0;
                 padding: 20px;
                 background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                color: white;
+                color: #333;
                 min-height: 100vh;
             }
-            
+
             .container {
-                max-width: 600px;
+                max-width: 700px;
                 margin: 0 auto;
-                background: rgba(255, 255, 255, 0.1);
-                backdrop-filter: blur(10px);
-                border-radius: 15px;
-                padding: 30px;
-                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-                border: 1px solid rgba(255, 255, 255, 0.2);
+                padding: 24px;
             }
-            
-            h1 {
-                margin: 0 0 10px 0;
-                font-size: 2.5em;
-                font-weight: 300;
+
+                        h1 {
+                margin: 0 0 8px 0;
+                font-size: 2em;
+                font-weight: 600;
+                color: white;
+                text-align: center;
                 text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
-                text-align: center;
             }
-            
+
             .subtitle {
-                font-size: 1.1em;
-                opacity: 0.8;
-                margin-bottom: 30px;
+                font-size: 1em;
+                color: rgba(255, 255, 255, 0.9);
+                margin-bottom: 32px;
                 text-align: center;
             }
-            
+
             .section {
-                margin-bottom: 25px;
-                padding: 20px;
-                background: rgba(255, 255, 255, 0.05);
-                border-radius: 10px;
-                border: 1px solid rgba(255, 255, 255, 0.1);
+                margin-bottom: 24px;
+                padding: 24px;
+                background: #f8f9fa;
+                border-radius: 8px;
+                border: 1px solid #e9ecef;
             }
-            
+
             .section h3 {
-                margin: 0 0 15px 0;
-                font-size: 1.3em;
-                color: #fff;
+                margin: 0 0 16px 0;
+                font-size: 1.25em;
+                font-weight: 600;
+                color: #1a1a1a;
             }
             
             .form-group {
-                margin-bottom: 15px;
+                margin-bottom: 16px;
                 display: flex;
                 align-items: center;
-                gap: 10px;
+                gap: 12px;
             }
-            
+
             .form-group label {
                 min-width: 60px;
-                font-size: 0.95em;
+                font-size: 1em;
+                font-weight: 500;
+                color: #1a1a1a;
             }
-            
+
             .form-group input {
                 flex: 1;
-                padding: 8px 12px;
-                border: 1px solid rgba(255, 255, 255, 0.3);
-                border-radius: 5px;
-                background: rgba(255, 255, 255, 0.1);
-                color: white;
-                font-size: 0.95em;
+                padding: 10px 12px;
+                border: 1px solid #dee2e6;
+                border-radius: 6px;
+                background: white;
+                color: #1a1a1a;
+                font-size: 1em;
+                transition: border-color 0.2s ease;
             }
-            
+
+            .form-group input:focus {
+                outline: none;
+                border-color: #667eea;
+                box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
+            }
+
             .form-group input::placeholder {
-                color: rgba(255, 255, 255, 0.6);
+                color: #6c757d;
             }
-            
+
             .button {
-                background: rgba(255, 255, 255, 0.2);
-                border: 1px solid rgba(255, 255, 255, 0.3);
+                background: #6c757d;
+                border: 1px solid #6c757d;
                 color: white;
                 padding: 10px 20px;
-                border-radius: 8px;
+                border-radius: 6px;
                 cursor: pointer;
-                font-size: 0.95em;
-                transition: all 0.3s ease;
-                margin: 5px;
+                font-size: 1em;
+                font-weight: 500;
+                transition: all 0.2s ease;
+                margin: 4px;
+                text-decoration: none;
+                display: inline-block;
+                text-align: center;
             }
-            
-            .button:hover {
-                background: rgba(255, 255, 255, 0.3);
+
+            .button:hover:not(:disabled) {
+                background: #5a6268;
+                border-color: #5a6268;
                 transform: translateY(-1px);
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
             }
-            
+
             .button:disabled {
-                opacity: 0.5;
+                opacity: 0.6;
                 cursor: not-allowed;
                 transform: none;
             }
-            
+
             .button.primary {
-                background: rgba(76, 175, 80, 0.8);
-                border-color: rgba(76, 175, 80, 1);
+                background: #667eea;
+                border-color: #667eea;
             }
-            
+
+            .button.primary:hover:not(:disabled) {
+                background: #5a6fd8;
+                border-color: #5a6fd8;
+            }
+
             .button.danger {
-                background: rgba(244, 67, 54, 0.8);
-                border-color: rgba(244, 67, 54, 1);
+                background: #dc3545;
+                border-color: #dc3545;
             }
-            
+
+            .button.danger:hover:not(:disabled) {
+                background: #c82333;
+                border-color: #c82333;
+            }
+
             .button.warning {
-                background: rgba(255, 152, 0, 0.8);
-                border-color: rgba(255, 152, 0, 1);
+                background: #ffc107;
+                border-color: #ffc107;
+                color: #1a1a1a;
+            }
+
+            .button.warning:hover:not(:disabled) {
+                background: #e0a800;
+                border-color: #e0a800;
             }
             
             .status {
-                background: rgba(255, 255, 255, 0.15);
-                padding: 10px 15px;
-                border-radius: 8px;
-                margin: 10px 0;
+                background: #f8f9fa;
+                padding: 12px 16px;
+                border-radius: 6px;
+                margin: 12px 0;
                 font-size: 0.9em;
-                border: 1px solid rgba(255, 255, 255, 0.2);
+                border: 1px solid #dee2e6;
+                color: #666;
             }
-            
+
             .status.success {
-                background: rgba(76, 175, 80, 0.3);
-                border-color: rgba(76, 175, 80, 0.5);
+                background: #d4edda;
+                border-color: #c3e6cb;
+                color: #155724;
             }
-            
+
             .status.error {
-                background: rgba(244, 67, 54, 0.3);
-                border-color: rgba(244, 67, 54, 0.5);
+                background: #f8d7da;
+                border-color: #f5c6cb;
+                color: #721c24;
             }
-            
+
             .controls {
                 display: flex;
-                gap: 10px;
+                gap: 8px;
                 flex-wrap: wrap;
                 justify-content: center;
+                margin-top: 16px;
             }
-            
+
             .step-content {
-                padding: 10px 0;
+                padding: 8px 0;
             }
-            
+
             .instruction {
-                margin: 15px 0;
+                margin: 16px 0;
                 font-style: italic;
-                color: rgba(255, 255, 255, 0.9);
+                color: #666;
+                font-size: 0.95em;
             }
             
             .markers-grid {
                 display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-                gap: 15px;
+                grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+                gap: 16px;
                 margin: 20px 0;
             }
-            
+
             .marker-card {
-                background: rgba(255, 255, 255, 0.1);
-                border: 1px solid rgba(255, 255, 255, 0.2);
+                background: white;
+                border: 1px solid #dee2e6;
                 border-radius: 8px;
-                padding: 15px;
+                padding: 20px;
                 text-align: center;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
             }
-            
+
             .marker-card h4 {
-                margin: 0 0 10px 0;
-                color: #fff;
+                margin: 0 0 12px 0;
+                color: #1a1a1a;
+                font-size: 1.1em;
+                font-weight: 600;
             }
-            
+
             .marker-card .marker-description {
                 font-size: 0.9em;
-                margin: 10px 0;
-                opacity: 0.8;
+                margin: 12px 0;
+                color: #666;
             }
-            
+
             .marker-image {
-                width: 120px;
-                height: 120px;
-                margin: 10px auto;
-                background: white;
-                border-radius: 4px;
+                width: 140px;
+                height: 140px;
+                margin: 12px auto;
+                background: #f8f9fa;
+                border-radius: 6px;
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                border: 2px solid rgba(255, 255, 255, 0.3);
+                border: 2px solid #dee2e6;
             }
-            
+
             .marker-image img {
                 max-width: 100%;
                 max-height: 100%;
             }
-            
+
             .download-btn {
-                background: rgba(33, 150, 243, 0.8);
-                border: 1px solid rgba(33, 150, 243, 1);
+                background: #28a745;
+                border: 1px solid #28a745;
                 color: white;
-                padding: 8px 16px;
+                padding: 10px 16px;
                 border-radius: 6px;
                 cursor: pointer;
                 display: inline-block;
-                margin: 5px;
+                margin: 4px;
                 font-size: 0.9em;
-                transition: all 0.3s ease;
+                font-weight: 500;
+                transition: all 0.2s ease;
+                text-decoration: none;
             }
-            
+
             .download-btn:hover {
-                background: rgba(33, 150, 243, 1);
+                background: #218838;
+                border-color: #218838;
                 transform: translateY(-1px);
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
             }
             
             .device-info {
-                background: rgba(76, 175, 80, 0.2);
-                border: 1px solid rgba(76, 175, 80, 0.5);
+                background: #d4edda;
+                border: 1px solid #c3e6cb;
                 border-radius: 8px;
-                padding: 15px;
-                margin: 15px 0;
+                padding: 16px;
+                margin: 16px 0;
             }
-            
+
             .device-info h4 {
-                margin: 0 0 10px 0;
-                color: #4CAF50;
-            }
-            
-            .device-info .info-item {
-                margin: 5px 0;
-                font-size: 0.95em;
-            }
-            
-            .gaze-display {
-                background: rgba(255, 255, 255, 0.05);
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                border-radius: 8px;
-                padding: 15px;
-                margin: 15px 0;
-            }
-            
-            .gaze-display h4 {
-                margin: 0 0 10px 0;
-                color: #fff;
-            }
-            
-            #gazeCoords {
-                font-family: 'Courier New', monospace;
+                margin: 0 0 12px 0;
+                color: #155724;
                 font-size: 1.1em;
-                color: #4CAF50;
+                font-weight: 600;
+            }
+
+            .device-info .info-item {
+                margin: 6px 0;
+                font-size: 0.9em;
+                color: #155724;
+            }
+
+            .gaze-display {
+                background: #f8f9fa;
+                border: 1px solid #dee2e6;
+                border-radius: 8px;
+                padding: 16px;
+                margin: 16px 0;
+            }
+
+            .gaze-display h4 {
+                margin: 0 0 12px 0;
+                color: #1a1a1a;
+                font-size: 1.1em;
+                font-weight: 600;
+            }
+
+            #gazeCoords {
+                font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', 'Droid Sans Mono', 'Source Code Pro', monospace;
+                font-size: 1.1em;
+                color: #667eea;
+                font-weight: 500;
+                background: #f1f3f4;
+                padding: 8px 12px;
+                border-radius: 4px;
+                border: 1px solid #e9ecef;
             }
         </style>
     </head>
@@ -473,8 +525,8 @@ def get_html_content():
                     <p class="instruction">Download and place these AprilTag markers on your screen corners:</p>
                     <div id="markersList" class="markers-grid"></div>
                     <div class="controls">
-                        <button class="button" onclick="saveAllMarkersAsPNG()" style="background: rgba(33, 150, 243, 0.8);">💾 Download as PNGs for Digital</button>
-                        <button class="button" onclick="saveAllMarkersWithPDF()" style="background: rgba(156, 39, 176, 0.8);">📄 Download as PDF for Print</button>
+                        <button class="button primary" onclick="saveAllMarkersAsPNG()">💾 Download as PNGs for Digital</button>
+                        <button class="button primary" onclick="saveAllMarkersWithPDF()">📄 Download as PDF for Print</button>
                         <button class="button primary" id="markersReadyBtn" onclick="markersReady()">✅ Markers Placed - Continue to Device Setup</button>
                     </div>
                 </div>

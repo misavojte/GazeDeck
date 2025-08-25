@@ -306,6 +306,42 @@ class AprilTagGenerator:
                 "success": False,
                 "message": f"Error saving markers: {str(e)}"
             }
+    
+    def create_pdf_only(self, output_dir: Path) -> Dict[str, Any]:
+        """Create PDF sheet for printing (no individual PNGs)"""
+        try:
+            output_dir = Path(output_dir)
+            output_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Get marker information
+            from .pupil_integration import pupil_integration
+            markers_info = pupil_integration.get_marker_info()
+            
+            # Create PDF sheet only
+            pdf_path = output_dir / "apriltag_markers_sheet.pdf"
+            pdf_success = self.create_pdf_sheet(markers_info, pdf_path)
+            
+            if pdf_success:
+                self.logger.info(f"PDF created successfully: {pdf_path}")
+                return {
+                    "success": True,
+                    "message": f"PDF created for printing: {pdf_path}",
+                    "files": [str(pdf_path)],
+                    "output_dir": str(output_dir),
+                    "pdf_created": True
+                }
+            else:
+                return {
+                    "success": False,
+                    "message": "Failed to create PDF"
+                }
+            
+        except Exception as e:
+            self.logger.error(f"Error creating PDF: {e}")
+            return {
+                "success": False,
+                "message": f"Error creating PDF: {str(e)}"
+            }
 
 
 # Global instance
