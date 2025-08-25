@@ -22,6 +22,18 @@ class Config:
             },
             "fixation": {
                 "duration_ms": 500
+            },
+            "screen": {
+                "width": 1920,
+                "height": 1080
+            },
+            "markers": {
+                "size": 100,
+                "margin": 50
+            },
+            "pupil": {
+                "device_timeout": 10,
+                "auto_connect": False
             }
         }
     

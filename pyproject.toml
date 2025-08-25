@@ -9,18 +9,18 @@ description = "Plane-relative gaze bridge over WebSocket (fixation.* + mark)."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-  "websockets>=12,<13",
+  "websockets>=15.0.1",
   "pydantic>=2,<3",
   "numpy>=1.26,<2",
-  "pywebview>=5.0,<6"
+  "pywebview>=5.0,<6",
+  "pupil-labs-realtime-api>=1.6.2",
+  "real-time-screen-gaze>=1.0.0",
+  "opencv-python>=4.8",
+  "Pillow>=9.0",
+  "reportlab>=4.0"
 ]
 
-# optional extras you can install later: pip install -e ".[neon]"
 [project.optional-dependencies]
-neon = [
-  "pupil-labs-realtime-api>=2.3",
-  "pupil-labs-real-time-screen-gaze>=0.2"
-]
 dev = [
   "ruff>=0.5",            # optional linter/formatter
   "pytest>=8"             # optional tests
