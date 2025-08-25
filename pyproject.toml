@@ -27,4 +27,4 @@ dev = [
 ]
 
 [project.scripts]
-gazedeck = "gazedeck_bridge:main"
+gazedeck = "gazedeck.main:main"
