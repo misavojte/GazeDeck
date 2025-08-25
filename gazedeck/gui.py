@@ -4,104 +4,258 @@ import webview
 import os
 import random
 import base64
+import logging
+import json
+import traceback
 from pathlib import Path
+from typing import Dict, Any, Optional, Union
 from .websocket_server import websocket_server
 from .config import config
 from .pupil_integration import pupil_integration
+
+# Set up logging for GUI module
+logger = logging.getLogger(__name__)
+
+class APIResponse:
+    """Standardized API response format"""
+    
+    @staticmethod
+    def success(message: str = "", data: Any = None) -> Dict[str, Any]:
+        """Create a success response"""
+        response = {"success": True, "message": message}
+        if data is not None:
+            response["data"] = data
+        return response
+    
+    @staticmethod
+    def error(message: str, error_code: str = None, details: Any = None) -> Dict[str, Any]:
+        """Create an error response"""
+        response = {"success": False, "message": message}
+        if error_code:
+            response["error_code"] = error_code
+        if details:
+            response["details"] = details
+        return response
 
 
 class GazedeckAPI:
     """Backend API for the GUI"""
     
-    def get_config(self):
-        """Get current configuration"""
-        return {
-            "host": config.websocket_host,
-            "port": config.websocket_port,
-            "fixation_duration_ms": config.fixation_duration_ms,
-            "server_running": websocket_server.is_running
-        }
+    def __init__(self):
+        """Initialize the API with logging"""
+        self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
+        self.debug_mode = config.get('gui.debug_mode', False)
+        
+    def _log_api_call(self, method_name: str, **kwargs):
+        """Log API method calls for debugging"""
+        if self.debug_mode:
+            self.logger.debug(f"API call: {method_name} with args: {kwargs}")
     
-    def update_config(self, host, port):
+    def _handle_api_error(self, method_name: str, error: Exception) -> Dict[str, Any]:
+        """Centralized error handling for API methods"""
+        error_msg = str(error)
+        self.logger.error(f"API error in {method_name}: {error_msg}")
+        self.logger.error(f"Traceback: {traceback.format_exc()}")
+        
+        return APIResponse.error(
+            message=f"Error in {method_name}: {error_msg}",
+            error_code="API_ERROR",
+            details={"method": method_name, "traceback": traceback.format_exc() if self.debug_mode else None}
+        )
+    
+    def log_js_error(self, error_info: Dict[str, Any]) -> Dict[str, Any]:
+        """Log JavaScript errors from the frontend"""
+        try:
+            self._log_api_call("log_js_error", error_info=error_info)
+            
+            error_message = error_info.get('message', 'Unknown JS error')
+            error_source = error_info.get('source', 'Unknown')
+            error_line = error_info.get('lineno', 'Unknown')
+            error_stack = error_info.get('stack', 'No stack trace')
+            
+            self.logger.error(f"JavaScript Error: {error_message}")
+            self.logger.error(f"Source: {error_source}, Line: {error_line}")
+            if error_stack and error_stack != 'No stack trace':
+                self.logger.error(f"Stack trace: {error_stack}")
+            
+            return APIResponse.success("JavaScript error logged successfully")
+            
+        except Exception as e:
+            return self._handle_api_error("log_js_error", e)
+    
+    def get_config(self) -> Dict[str, Any]:
+        """Get current configuration"""
+        try:
+            self._log_api_call("get_config")
+            
+            config_data = {
+                "host": config.websocket_host,
+                "port": config.websocket_port,
+                "fixation_duration_ms": config.fixation_duration_ms,
+                "server_running": websocket_server.is_running,
+                "debug_mode": self.debug_mode
+            }
+            
+            return APIResponse.success("Configuration retrieved", config_data)
+            
+        except Exception as e:
+            return self._handle_api_error("get_config", e)
+    
+    def update_config(self, host: str, port: Union[str, int]) -> Dict[str, Any]:
         """Update WebSocket configuration"""
         try:
-            port = int(port)
+            self._log_api_call("update_config", host=host, port=port)
+            
+            # Validate inputs
+            if not host or not isinstance(host, str):
+                return APIResponse.error("Invalid host: must be a non-empty string", "INVALID_INPUT")
+            
+            try:
+                port_int = int(port)
+                if not (1 <= port_int <= 65535):
+                    return APIResponse.error("Invalid port: must be between 1 and 65535", "INVALID_PORT")
+            except (ValueError, TypeError):
+                return APIResponse.error("Invalid port: must be a valid integer", "INVALID_PORT")
+            
+            # Update configuration
             config.set('websocket.host', host)
-            config.set('websocket.port', port)
+            config.set('websocket.port', port_int)
             websocket_server.host = host
-            websocket_server.port = port
-            return {"success": True, "message": "Configuration updated"}
-        except ValueError:
-            return {"success": False, "message": "Invalid port number"}
+            websocket_server.port = port_int
+            
+            self.logger.info(f"Configuration updated - Host: {host}, Port: {port_int}")
+            return APIResponse.success("Configuration updated successfully")
+            
+        except Exception as e:
+            return self._handle_api_error("update_config", e)
     
-    def start_server(self):
+    def start_server(self) -> Dict[str, Any]:
         """Start the WebSocket server"""
         try:
+            self._log_api_call("start_server")
+            
             websocket_server.start_server()
-            return {"success": True, "message": "Server starting..."}
+            self.logger.info("WebSocket server started successfully")
+            return APIResponse.success("Server starting...")
+            
         except Exception as e:
-            return {"success": False, "message": f"Failed to start server: {str(e)}"}
+            return self._handle_api_error("start_server", e)
     
-    def stop_server(self):
+    def stop_server(self) -> Dict[str, Any]:
         """Stop the WebSocket server"""
         try:
+            self._log_api_call("stop_server")
+            
             websocket_server.stop_server()
-            return {"success": True, "message": "Server stopped"}
+            self.logger.info("WebSocket server stopped successfully")
+            return APIResponse.success("Server stopped")
+            
         except Exception as e:
-            return {"success": False, "message": f"Failed to stop server: {str(e)}"}
+            return self._handle_api_error("stop_server", e)
     
-    def trigger_fixation(self):
-        """Trigger a random fixation sequence"""
+    def trigger_fixation(self, x: Optional[float] = None, y: Optional[float] = None) -> Dict[str, Any]:
+        """Trigger a fixation sequence at specified or random coordinates"""
         try:
-            # Generate random coordinates
-            x = random.uniform(0.0, 1.0)
-            y = random.uniform(0.0, 1.0)
+            self._log_api_call("trigger_fixation", x=x, y=y)
+            
+            # Generate random coordinates if not provided
+            if x is None:
+                x = random.uniform(0.0, 1.0)
+            if y is None:
+                y = random.uniform(0.0, 1.0)
+            
+            # Validate coordinates
+            if not (0.0 <= x <= 1.0) or not (0.0 <= y <= 1.0):
+                return APIResponse.error("Coordinates must be between 0.0 and 1.0", "INVALID_COORDINATES")
             
             websocket_server.trigger_fixation_sequence(x, y)
-            return {
-                "success": True, 
-                "message": f"Fixation triggered at ({x:.3f}, {y:.3f})"
-            }
+            
+            message = f"Fixation triggered at ({x:.3f}, {y:.3f})"
+            self.logger.info(message)
+            return APIResponse.success(message, {"x": x, "y": y})
+            
         except Exception as e:
-            return {"success": False, "message": f"Failed to trigger fixation: {str(e)}"}
+            return self._handle_api_error("trigger_fixation", e)
     
     # Pupil Labs Integration Methods
     
-    def check_pupil_availability(self):
+    def check_pupil_availability(self) -> Dict[str, Any]:
         """Check if Pupil Labs libraries are available"""
-        return pupil_integration.check_pupil_availability()
+        try:
+            self._log_api_call("check_pupil_availability")
+            
+            result = pupil_integration.check_pupil_availability()
+            self.logger.info(f"Pupil availability check: {result}")
+            return result
+            
+        except Exception as e:
+            return self._handle_api_error("check_pupil_availability", e)
     
-    def discover_pupil_device(self):
+    def discover_pupil_device(self, timeout: Optional[int] = None) -> Dict[str, Any]:
         """Discover and connect to Pupil Labs device"""
-        timeout = config.get('pupil.device_timeout', 10)
-        return pupil_integration.discover_device(timeout)
+        try:
+            if timeout is None:
+                timeout = config.get('pupil.device_timeout', 10)
+            
+            self._log_api_call("discover_pupil_device", timeout=timeout)
+            
+            # Validate timeout
+            if not isinstance(timeout, int) or timeout <= 0:
+                return APIResponse.error("Timeout must be a positive integer", "INVALID_TIMEOUT")
+            
+            result = pupil_integration.discover_device(timeout)
+            self.logger.info(f"Device discovery result: {result.get('success', False)}")
+            return result
+            
+        except Exception as e:
+            return self._handle_api_error("discover_pupil_device", e)
     
-    def setup_gaze_mapper(self):
+    def setup_gaze_mapper(self) -> Dict[str, Any]:
         """Setup gaze mapper with device calibration"""
-        return pupil_integration.setup_gaze_mapper()
+        try:
+            self._log_api_call("setup_gaze_mapper")
+            
+            result = pupil_integration.setup_gaze_mapper()
+            self.logger.info(f"Gaze mapper setup result: {result.get('success', False)}")
+            return result
+            
+        except Exception as e:
+            return self._handle_api_error("setup_gaze_mapper", e)
     
-    def get_marker_info(self):
+    def get_marker_info(self) -> Dict[str, Any]:
         """Get information about AprilTag markers"""
-        return pupil_integration.get_marker_info()
+        try:
+            self._log_api_call("get_marker_info")
+            
+            markers = pupil_integration.get_marker_info()
+            self.logger.debug(f"Retrieved {len(markers) if markers else 0} markers")
+            return APIResponse.success("Marker info retrieved", markers)
+            
+        except Exception as e:
+            return self._handle_api_error("get_marker_info", e)
     
-    def generate_marker_image(self, marker_id):
+    def generate_marker_image(self, marker_id: int) -> Dict[str, Any]:
         """Generate AprilTag marker image as base64 data URL"""
         try:
+            self._log_api_call("generate_marker_image", marker_id=marker_id)
+            
+            # Validate marker_id
+            if not isinstance(marker_id, int) or marker_id < 0:
+                return APIResponse.error("Marker ID must be a non-negative integer", "INVALID_MARKER_ID")
+            
             marker_bytes = pupil_integration.generate_marker_image(marker_id)
             if marker_bytes:
                 # Convert to base64 data URL
                 b64_data = base64.b64encode(marker_bytes).decode('utf-8')
-                return {
-                    "success": True,
-                    "data_url": f"data:image/png;base64,{b64_data}"
-                }
+                data_url = f"data:image/png;base64,{b64_data}"
+                
+                self.logger.debug(f"Generated marker image for ID {marker_id}")
+                return APIResponse.success("Marker image generated", {"data_url": data_url})
             else:
-                return {
-                    "success": False,
-                    "message": "Failed to generate marker image"
-                }
+                return APIResponse.error("Failed to generate marker image", "GENERATION_FAILED")
+                
         except Exception as e:
-            return {"success": False, "message": f"Error generating marker: {str(e)}"}
+            return self._handle_api_error("generate_marker_image", e)
     
     def save_marker_to_file(self, marker_id):
         """Save AprilTag marker directly to Downloads folder"""
@@ -510,10 +664,85 @@ def get_html_content():
                 border-radius: 4px;
                 border: 1px solid #e9ecef;
             }
+
+            /* Loading Screen Styles */
+            .loading-screen {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                z-index: 9999;
+            }
+
+            .loading-content {
+                text-align: center;
+                color: white;
+            }
+
+            .loading-content h1 {
+                font-size: 3em;
+                margin-bottom: 30px;
+                font-weight: 600;
+                text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+            }
+
+            .loading-spinner {
+                width: 60px;
+                height: 60px;
+                border: 4px solid rgba(255, 255, 255, 0.3);
+                border-top: 4px solid white;
+                border-radius: 50%;
+                animation: spin 1s linear infinite;
+                margin: 20px auto;
+            }
+
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
+
+            .loading-message {
+                font-size: 1.4em;
+                margin: 20px 0 10px 0;
+                font-weight: 500;
+            }
+
+            .loading-details {
+                font-size: 1em;
+                opacity: 0.8;
+                margin-bottom: 20px;
+            }
+
+            /* Fade animation for transitions */
+            .fade-out {
+                opacity: 0;
+                transition: opacity 0.5s ease-out;
+            }
+
+            .fade-in {
+                opacity: 1;
+                transition: opacity 0.5s ease-in;
+            }
         </style>
     </head>
     <body>
-        <div class="container">
+        <!-- Loading Screen -->
+        <div id="loadingScreen" class="loading-screen">
+            <div class="loading-content">
+                <h1>GazeDeck</h1>
+                <div class="loading-spinner"></div>
+                <div id="loadingMessage" class="loading-message">Initializing application...</div>
+                <div id="loadingDetails" class="loading-details">Please wait while we set up the interface</div>
+            </div>
+        </div>
+
+        <!-- Main Application -->
+        <div id="mainApp" class="container" style="display: none;">
             <h1>GazeDeck</h1>
             <div class="subtitle">Plane-relative gaze bridge control panel</div>
             
@@ -593,22 +822,313 @@ def get_html_content():
         </div>
         
         <script>
+            // Global error handler for JavaScript errors
+            window.addEventListener('error', function(event) {
+                const errorInfo = {
+                    message: event.message,
+                    source: event.filename,
+                    lineno: event.lineno,
+                    colno: event.colno,
+                    stack: event.error ? event.error.stack : 'No stack trace available'
+                };
+                
+                console.error('JavaScript Error:', errorInfo);
+                
+                // Log to Python backend if available
+                if (window.pywebview && window.pywebview.api && window.pywebview.api.log_js_error) {
+                    window.pywebview.api.log_js_error(errorInfo).catch(err => {
+                        console.error('Failed to log error to backend:', err);
+                    });
+                }
+            });
+            
+            // Handle unhandled promise rejections
+            window.addEventListener('unhandledrejection', function(event) {
+                const errorInfo = {
+                    message: 'Unhandled Promise Rejection: ' + (event.reason ? event.reason.toString() : 'Unknown'),
+                    source: 'Promise',
+                    lineno: 'N/A',
+                    colno: 'N/A',
+                    stack: event.reason && event.reason.stack ? event.reason.stack : 'No stack trace available'
+                };
+                
+                console.error('Unhandled Promise Rejection:', errorInfo);
+                
+                // Log to Python backend if available
+                if (window.pywebview && window.pywebview.api && window.pywebview.api.log_js_error) {
+                    window.pywebview.api.log_js_error(errorInfo).catch(err => {
+                        console.error('Failed to log promise rejection to backend:', err);
+                    });
+                }
+            });
+
+            // Application state
             let config = {};
             let pupilConnected = false;
             let gazeMapperReady = false;
             let gazeTrackingActive = false;
+            let debugMode = false;
+            let appInitialized = false;
+
+            // Loading screen management
+            const LoadingManager = {
+                updateMessage: function(message, details = null) {
+                    try {
+                        const messageEl = document.getElementById('loadingMessage');
+                        const detailsEl = document.getElementById('loadingDetails');
+                        
+                        if (messageEl) {
+                            messageEl.textContent = message;
+                        } else {
+                            // Fallback if elements don't exist yet
+                            const loadingMessageEl = document.querySelector('.loading-message');
+                            const loadingDetailsEl = document.querySelector('.loading-details');
+                            if (loadingMessageEl) loadingMessageEl.textContent = message;
+                            if (loadingDetailsEl && details) loadingDetailsEl.textContent = details;
+                        }
+                        
+                        if (details && detailsEl) {
+                            detailsEl.textContent = details;
+                        }
+                        
+                        console.log(`Loading: ${message}${details ? ' - ' + details : ''}`);
+                    } catch (error) {
+                        console.error('Error updating loading message:', error);
+                    }
+                },
+
+                hideLoading: function() {
+                    try {
+                        const loadingScreen = document.getElementById('loadingScreen');
+                        const mainApp = document.getElementById('mainApp');
+                        
+                        if (loadingScreen && mainApp) {
+                            // Fade out loading screen
+                            loadingScreen.classList.add('fade-out');
+                            
+                            setTimeout(() => {
+                                loadingScreen.style.display = 'none';
+                                mainApp.style.display = 'block';
+                                mainApp.classList.add('fade-in');
+                                appInitialized = true;
+                                console.log('Application fully initialized and visible');
+                            }, 500);
+                        }
+                    } catch (error) {
+                        console.error('Error hiding loading screen:', error);
+                        // Fallback - just hide loading and show main app
+                        const loadingScreen = document.getElementById('loadingScreen');
+                        const mainApp = document.getElementById('mainApp');
+                        if (loadingScreen) loadingScreen.style.display = 'none';
+                        if (mainApp) mainApp.style.display = 'block';
+                        appInitialized = true;
+                    }
+                },
+
+                showError: function(message, details = null) {
+                    try {
+                        const loadingContent = document.querySelector('.loading-content');
+                        if (loadingContent) {
+                            loadingContent.innerHTML = `
+                                <h1>GazeDeck</h1>
+                                <div style="color: #ff6b6b; font-size: 1.5em; margin: 20px 0;">⚠️ Initialization Error</div>
+                                <div style="font-size: 1.2em; margin-bottom: 10px;">${message}</div>
+                                ${details ? `<div style="font-size: 0.9em; opacity: 0.8;">${details}</div>` : ''}
+                                <button onclick="location.reload()" style="margin-top: 20px; padding: 10px 20px; background: white; color: #667eea; border: none; border-radius: 6px; cursor: pointer; font-size: 1em;">
+                                    🔄 Retry
+                                </button>
+                            `;
+                        }
+                    } catch (error) {
+                        console.error('Error showing loading error:', error);
+                    }
+                }
+            };
+            
+            // Utility function for safe API calls
+            async function safeApiCall(methodName, ...args) {
+                try {
+                    if (!window.pywebview || !window.pywebview.api) {
+                        throw new Error('PyWebView API not available');
+                    }
+                    
+                    const method = window.pywebview.api[methodName];
+                    if (typeof method !== 'function') {
+                        throw new Error(`API method '${methodName}' not found`);
+                    }
+                    
+                    if (debugMode) {
+                        console.log(`API Call: ${methodName}`, args);
+                    }
+                    
+                    const result = await method(...args);
+                    
+                    if (debugMode) {
+                        console.log(`API Result: ${methodName}`, result);
+                    }
+                    
+                    return result;
+                    
+                } catch (error) {
+                    console.error(`API call failed: ${methodName}`, error);
+                    
+                    // Return a standardized error response
+                    return {
+                        success: false,
+                        message: `API call failed: ${error.message}`,
+                        error_code: 'API_CALL_FAILED'
+                    };
+                }
+            }
+            
+            // Utility function to safely show messages
+            function showMessage(elementId, message, success = true) {
+                try {
+                    const element = document.getElementById(elementId);
+                    if (element) {
+                        element.textContent = message;
+                        element.className = success ? 'status success' : 'status error';
+                    } else {
+                        console.warn(`Element with ID '${elementId}' not found`);
+                    }
+                } catch (error) {
+                    console.error('Error showing message:', error);
+                }
+            }
+            
+            // Utility function for safe DOM manipulation
+            function safeSetElementProperty(elementId, property, value) {
+                try {
+                    const element = document.getElementById(elementId);
+                    if (element && property in element) {
+                        element[property] = value;
+                        return true;
+                    } else {
+                        console.warn(`Element '${elementId}' not found or property '${property}' not available`);
+                        return false;
+                    }
+                } catch (error) {
+                    console.error(`Error setting ${property} on element ${elementId}:`, error);
+                    return false;
+                }
+            }
+            
+            // Utility function for safe event listener addition
+            function safeAddEventListener(elementId, event, handler) {
+                try {
+                    const element = document.getElementById(elementId);
+                    if (element) {
+                        element.addEventListener(event, handler);
+                        return true;
+                    } else {
+                        console.warn(`Element '${elementId}' not found for event '${event}'`);
+                        return false;
+                    }
+                } catch (error) {
+                    console.error(`Error adding ${event} listener to element ${elementId}:`, error);
+                    return false;
+                }
+            }
+            
+            // Button state management utilities
+            const ButtonUtils = {
+                disable: function(buttonId, loadingText = null) {
+                    try {
+                        const btn = document.getElementById(buttonId);
+                        if (btn) {
+                            btn.disabled = true;
+                            if (loadingText) {
+                                btn.dataset.originalText = btn.textContent;
+                                btn.textContent = loadingText;
+                            }
+                        }
+                    } catch (error) {
+                        console.error(`Error disabling button ${buttonId}:`, error);
+                    }
+                },
+                
+                enable: function(buttonId, restoreText = false) {
+                    try {
+                        const btn = document.getElementById(buttonId);
+                        if (btn) {
+                            btn.disabled = false;
+                            if (restoreText && btn.dataset.originalText) {
+                                btn.textContent = btn.dataset.originalText;
+                                delete btn.dataset.originalText;
+                            }
+                        }
+                    } catch (error) {
+                        console.error(`Error enabling button ${buttonId}:`, error);
+                    }
+                },
+                
+                setLoading: function(buttonId, loadingText) {
+                    this.disable(buttonId, loadingText);
+                },
+                
+                clearLoading: function(buttonId) {
+                    this.enable(buttonId, true);
+                }
+            };
             
             // Load initial setup on page load
             window.addEventListener('DOMContentLoaded', async function() {
-                await initializeApp();
+                try {
+                    await initializeApp();
+                } catch (error) {
+                    console.error('Failed to initialize app:', error);
+                    LoadingManager.showError('Failed to initialize application', error.message);
+                }
             });
             
-            async function initializeApp() {
-                // Step 1: Load AprilTag markers immediately
-                await loadMarkers();
+            async function waitForPyWebViewAPI(maxAttempts = 20, delayMs = 500) {
+                LoadingManager.updateMessage('Connecting to backend...', 'Waiting for PyWebView API');
                 
-                // Load basic config
-                await loadConfig();
+                for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+                    if (window.pywebview && window.pywebview.api) {
+                        LoadingManager.updateMessage('Backend connected!', 'PyWebView API ready');
+                        return true;
+                    }
+                    
+                    if (attempt < maxAttempts) {
+                        LoadingManager.updateMessage('Connecting to backend...', `Attempt ${attempt}/${maxAttempts}`);
+                        await new Promise(resolve => setTimeout(resolve, delayMs));
+                    }
+                }
+                
+                throw new Error('PyWebView API not available after maximum attempts');
+            }
+            
+            async function initializeApp() {
+                try {
+                    LoadingManager.updateMessage('Starting GazeDeck...', 'Initializing application components');
+                    
+                    // Step 1: Wait for PyWebView API to be ready
+                    await waitForPyWebViewAPI();
+                    
+                    // Step 2: Load configuration
+                    LoadingManager.updateMessage('Loading configuration...', 'Retrieving app settings');
+                    await loadConfig();
+                    
+                    // Step 3: Load AprilTag markers
+                    LoadingManager.updateMessage('Loading markers...', 'Generating AprilTag markers');
+                    await loadMarkers();
+                    
+                    // Step 4: Finalize initialization
+                    LoadingManager.updateMessage('Finalizing setup...', 'Almost ready!');
+                    
+                    // Small delay to show the final message
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    
+                    // Hide loading screen and show main app
+                    LoadingManager.hideLoading();
+                    
+                    console.log('Application initialized successfully');
+                    
+                } catch (error) {
+                    console.error('Error during app initialization:', error);
+                    LoadingManager.showError('Application initialization failed', error.message);
+                }
             }
             
             async function checkPupilAvailability() {
@@ -617,27 +1137,27 @@ def get_html_content():
                 // Check if pywebview API is available
                 if (!window.pywebview || !window.pywebview.api) {
                     console.log('PyWebView API not ready, retrying in 500ms...');
-                    statusEl.textContent = '⏳ Initializing...';
-                    statusEl.className = 'status';
+                    showMessage('pupilAvailabilityStatus', '⏳ Initializing...', true);
                     setTimeout(checkPupilAvailability, 500);
                     return;
                 }
                 
                 try {
-                    const result = await window.pywebview.api.check_pupil_availability();
+                    const result = await safeApiCall('check_pupil_availability');
                     
-                    if (result.available) {
-                        statusEl.textContent = '✅ ' + result.message;
-                        statusEl.className = 'status success';
-                        document.getElementById('pupilConnectionControls').style.display = 'block';
+                    if (result.success) {
+                        if (result.data && result.data.available) {
+                            showMessage('pupilAvailabilityStatus', '✅ ' + result.message, true);
+                            document.getElementById('pupilConnectionControls').style.display = 'block';
+                        } else {
+                            showMessage('pupilAvailabilityStatus', '❌ ' + result.message, false);
+                        }
                     } else {
-                        statusEl.textContent = '❌ ' + result.message;
-                        statusEl.className = 'status error';
+                        showMessage('pupilAvailabilityStatus', '❌ ' + result.message, false);
                     }
                 } catch (error) {
                     console.error('Error checking Pupil availability:', error);
-                    statusEl.textContent = '❌ Error checking Pupil Labs libraries: ' + error.message;
-                    statusEl.className = 'status error';
+                    showMessage('pupilAvailabilityStatus', '❌ Error checking Pupil Labs libraries', false);
                 }
             }
             
@@ -710,17 +1230,23 @@ def get_html_content():
             }
             
             async function loadMarkers() {
-                // Wait for pywebview API to be ready
-                if (!window.pywebview || !window.pywebview.api) {
-                    console.log('PyWebView API not ready for markers, retrying in 500ms...');
-                    showMessage('markersStatus', '⏳ Loading markers...', false);
-                    setTimeout(loadMarkers, 500);
-                    return;
-                }
-                
                 try {
-                    const markers = await window.pywebview.api.get_marker_info();
+                    // Get marker info first
+                    const markerInfoResult = await safeApiCall('get_marker_info');
+                    
+                    if (!markerInfoResult.success) {
+                        throw new Error(markerInfoResult.message || 'Failed to get marker info');
+                    }
+                    
+                    const markers = markerInfoResult.data;
+                    if (!markers || !Array.isArray(markers)) {
+                        throw new Error('Invalid marker data received');
+                    }
+                    
                     const markersListEl = document.getElementById('markersList');
+                    if (!markersListEl) {
+                        throw new Error('Markers list element not found');
+                    }
                     
                     markersListEl.innerHTML = '';
                     
@@ -729,26 +1255,39 @@ def get_html_content():
                     
                     for (const markerId of markerOrder) {
                         const marker = markers.find(m => m.id === markerId);
-                        if (!marker) continue;
+                        if (!marker) {
+                            console.warn(`Marker with ID ${markerId} not found`);
+                            continue;
+                        }
                         
                         const markerCard = document.createElement('div');
                         markerCard.className = 'marker-card';
                         
                         // Generate marker image
-                        console.log(`Generating marker image for marker ${marker.id}`);
-                        const imageResult = await window.pywebview.api.generate_marker_image(marker.id);
-                        console.log(`Marker ${marker.id} generation result:`, { 
-                            success: imageResult.success, 
-                            hasDataUrl: !!imageResult.data_url,
-                            dataUrlStart: imageResult.data_url ? imageResult.data_url.substring(0, 50) : 'N/A'
-                        });
+                        if (debugMode) {
+                            console.log(`Generating marker image for marker ${marker.id}`);
+                        }
+                        
+                        const imageResult = await safeApiCall('generate_marker_image', marker.id);
+                        
+                        if (debugMode) {
+                            console.log(`Marker ${marker.id} generation result:`, { 
+                                success: imageResult.success, 
+                                hasDataUrl: !!(imageResult.data && imageResult.data.data_url),
+                                dataUrlStart: (imageResult.data && imageResult.data.data_url) ? 
+                                    imageResult.data.data_url.substring(0, 50) : 'N/A'
+                            });
+                        }
+                        
+                        const imageUrl = (imageResult.success && imageResult.data && imageResult.data.data_url) ? 
+                            imageResult.data.data_url : null;
                         
                         markerCard.innerHTML = `
                             <h4>ID ${marker.id} - ${marker.position.replace('-', ' ').toUpperCase()}</h4>
                             <div class="marker-image">
-                                ${imageResult.success ? 
-                                    `<img src="${imageResult.data_url}" alt="Marker ${marker.id}">` : 
-                                    'Failed to generate'
+                                ${imageUrl ? 
+                                    `<img src="${imageUrl}" alt="Marker ${marker.id}">` : 
+                                    '<div style="color: #666; padding: 20px;">Preview will be available after download</div>'
                                 }
                             </div>
                             <div class="marker-description">${marker.description}</div>
@@ -758,9 +1297,11 @@ def get_html_content():
                     }
                     
                     showMessage('markersStatus', '✅ Markers ready - download and place them on your screen', true);
+                    
                 } catch (error) {
                     console.error('Error loading markers:', error);
-                    showMessage('markersStatus', '❌ Error loading markers', false);
+                    showMessage('markersStatus', '❌ Error loading markers: ' + error.message, false);
+                    throw error; // Re-throw to be caught by initialization
                 }
             }
             
@@ -771,17 +1312,16 @@ def get_html_content():
             async function saveAllMarkersAsPNG() {
                 console.log('Saving all markers as PNGs...');
                 
-                // Show loading state
-                const btn = event.target;
-                const originalText = btn.textContent;
-                btn.textContent = '⏳ Creating PNGs...';
-                btn.disabled = true;
+                const btnId = event.target.id || 'saveAllPngBtn';
                 
                 try {
-                    const result = await window.pywebview.api.save_all_markers_png_only();
+                    // Show loading state
+                    ButtonUtils.setLoading(btnId, '⏳ Creating PNGs...');
+                    
+                    const result = await safeApiCall('save_all_markers_png_only');
                     
                     if (result.success) {
-                        const fileCount = result.files ? result.files.length : 0;
+                        const fileCount = result.data && result.data.files ? result.data.files.length : 0;
                         alert(`✅ ${result.message}\\n\\nSaved ${fileCount} PNG files for digital use!`);
                         console.log('All PNG markers saved successfully:', result);
                     } else {
@@ -793,8 +1333,7 @@ def get_html_content():
                     alert(`❌ Error saving PNG markers: ${error.message}`);
                 } finally {
                     // Restore button state
-                    btn.textContent = originalText;
-                    btn.disabled = false;
+                    ButtonUtils.clearLoading(btnId);
                 }
             }
             
@@ -942,29 +1481,50 @@ def get_html_content():
             }
             
             async function loadConfig() {
-                // Wait for pywebview API to be ready
-                if (!window.pywebview || !window.pywebview.api) {
-                    console.log('PyWebView API not ready for config, using defaults...');
-                    config = {
-                        host: 'localhost',
-                        port: 8765,
-                        server_running: false
-                    };
-                    return;
-                }
-                
                 try {
-                    config = await window.pywebview.api.get_config();
-                    const hostEl = document.getElementById('host');
-                    const portEl = document.getElementById('port');
-                    if (hostEl) hostEl.value = config.host;
-                    if (portEl) portEl.value = config.port;
+                    // Wait for pywebview API to be ready
+                    if (!window.pywebview || !window.pywebview.api) {
+                        console.log('PyWebView API not ready for config, using defaults...');
+                        config = {
+                            host: 'localhost',
+                            port: 8765,
+                            server_running: false,
+                            debug_mode: false
+                        };
+                        return;
+                    }
+                    
+                    const result = await safeApiCall('get_config');
+                    
+                    if (result.success && result.data) {
+                        config = result.data;
+                        debugMode = config.debug_mode || false;
+                        
+                        // Update UI elements if they exist
+                        const hostEl = document.getElementById('host');
+                        const portEl = document.getElementById('port');
+                        if (hostEl) hostEl.value = config.host;
+                        if (portEl) portEl.value = config.port;
+                        
+                        if (debugMode) {
+                            console.log('Debug mode enabled');
+                        }
+                    } else {
+                        console.warn('Failed to load config, using defaults');
+                        config = {
+                            host: 'localhost',
+                            port: 8765,
+                            server_running: false,
+                            debug_mode: false
+                        };
+                    }
                 } catch (error) {
-                    console.error('Failed to load config:', error);
+                    console.error('Error loading config:', error);
                     config = {
                         host: 'localhost',
                         port: 8765,
-                        server_running: false
+                        server_running: false,
+                        debug_mode: false
                     };
                 }
             }
@@ -1074,28 +1634,106 @@ def get_html_content():
     """
 
 
+class GUIManager:
+    """Manager for the GUI window and lifecycle"""
+    
+    def __init__(self):
+        self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
+        self.api = None
+        self.window = None
+        
+    def setup_logging(self):
+        """Setup logging configuration for GUI"""
+        # Configure logging for GUI if not already configured
+        if not logging.getLogger().handlers:
+            logging.basicConfig(
+                level=logging.INFO,
+                format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                handlers=[
+                    logging.StreamHandler(),
+                    logging.FileHandler('gazedeck_gui.log', encoding='utf-8')
+                ]
+            )
+        
+        # Set debug level based on config
+        debug_mode = config.get('gui.debug_mode', False)
+        if debug_mode:
+            logging.getLogger(__name__).setLevel(logging.DEBUG)
+            self.logger.debug("Debug mode enabled for GUI")
+    
+    def create_api(self) -> GazedeckAPI:
+        """Create and configure the API instance"""
+        try:
+            self.api = GazedeckAPI()
+            self.logger.info("API instance created successfully")
+            return self.api
+        except Exception as e:
+            self.logger.error(f"Failed to create API instance: {e}")
+            raise
+    
+    def get_window_config(self) -> Dict[str, Any]:
+        """Get window configuration from config or defaults"""
+        return {
+            'title': config.get('gui.window_title', 'GazeDeck Control Panel'),
+            'width': config.get('gui.window_width', 800),
+            'height': config.get('gui.window_height', 700),
+            'min_size': tuple(config.get('gui.min_size', [600, 500])),
+            'resizable': config.get('gui.resizable', True),
+            'shadow': config.get('gui.shadow', True),
+            'on_top': config.get('gui.on_top', False),
+            'maximized': config.get('gui.maximized', False),
+            'fullscreen': config.get('gui.fullscreen', False)
+        }
+    
+    def create_window(self):
+        """Create the webview window"""
+        try:
+            html_content = get_html_content()
+            window_config = self.get_window_config()
+            
+            self.logger.info(f"Creating window with config: {window_config}")
+            
+            # Create the webview window with js_api
+            self.window = webview.create_window(
+                html=html_content,
+                js_api=self.api,
+                **window_config
+            )
+            
+            self.logger.info("Window created successfully")
+            return self.window
+            
+        except Exception as e:
+            self.logger.error(f"Failed to create window: {e}")
+            raise
+    
+    def start_gui(self):
+        """Start the GUI application"""
+        try:
+            self.setup_logging()
+            self.logger.info("Starting GazeDeck GUI...")
+            
+            # Create API instance
+            self.create_api()
+            
+            # Create window
+            self.create_window()
+            
+            # Start webview with appropriate debug setting
+            debug_mode = config.get('gui.debug_mode', False)
+            self.logger.info(f"Starting webview (debug={debug_mode})")
+            
+            webview.start(debug=debug_mode)
+            
+        except Exception as e:
+            self.logger.error(f"Failed to start GUI: {e}")
+            raise
+
+
 def create_gui():
     """Create and show the GUI window"""
-    html_content = get_html_content()
-    
-    # Create API instance
-    api = GazedeckAPI()
-    
-    # Create the webview window with js_api
-    webview.create_window(
-        title="GazeDeck Control Panel",
-        html=html_content,
-        width=800,
-        height=700,
-        min_size=(600, 500),
-        resizable=True,
-        shadow=True,
-        on_top=False,
-        js_api=api
-    )
-    
-    # Start webview
-    webview.start(debug=False)
+    gui_manager = GUIManager()
+    gui_manager.start_gui()
 
 
 if __name__ == "__main__":
