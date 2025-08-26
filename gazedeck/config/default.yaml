@@ -1,0 +1,13 @@
+provider: pupil-labs
+screen:
+  width_px: 1920
+  height_px: 1080
+homography:
+  ttl_ms: 300
+  max_reproj_px: 2.0
+  min_markers: 3
+tag_rate: auto
+ws:
+  port: 8765
+markers_json: config/markers/screen_4tags.example.json
+homography_mode: every
