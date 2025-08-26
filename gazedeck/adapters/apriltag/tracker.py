@@ -94,6 +94,14 @@ class FrameSkipper:
             self._last_processed_time = current_time_seconds
             return True
 
+        # For very high FPS (interval < 1ms), process all frames
+        if self._interval_seconds is None or self._interval_seconds < 0.001:
+            return True
+
+        # Allow processing if timestamp is same as last processed (handles identical timestamps)
+        if current_time_seconds == self._last_processed_time:
+            return True
+
         if current_time_seconds - self._last_processed_time >= self._interval_seconds:
             self._last_processed_time = current_time_seconds
             return True
@@ -215,7 +223,7 @@ class AprilTagPoseProvider(ISurfacePoseProvider):
                     mean_reproj_px = float(np.mean(reproj_errors))
 
                     # Count inliers
-                    inliers = np.sum(mask)
+                    inliers = int(np.sum(mask).item())
                     markers_used = inliers // 4  # 4 corners per marker
 
                     yield HomographyEstimate(

@@ -26,7 +26,7 @@ def apply_homography(img_xy: tuple[float, float], H: list[list[float]]) -> tuple
     screen_point = H_np @ img_point
 
     # Convert back from homogeneous coordinates
-    screen_x = screen_point[0, 0] / screen_point[2, 0]
-    screen_y = screen_point[1, 0] / screen_point[2, 0]
+    screen_x = float(screen_point[0, 0] / screen_point[2, 0])
+    screen_y = float(screen_point[1, 0] / screen_point[2, 0])
 
     return (screen_x, screen_y)

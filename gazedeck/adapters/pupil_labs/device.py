@@ -28,7 +28,6 @@ class PupilLabsDevice(IDeviceProvider):
             raise ImportError("pupil-labs-realtime-api package is required")
 
         self._discovery_timeout = discovery_timeout
-        self._device: Optional[Device] = None
         self._sensor_urls: Optional[SensorURLs] = None
         self._lock = asyncio.Lock()
 
@@ -62,10 +61,7 @@ class PupilLabsDevice(IDeviceProvider):
                 logger.info(f"Found device: {device_info.name} at {device_info.address}")
 
                 # Create device instance and get sensor URLs
-                device = Device.from_discovered_device(device_info)
-                await device.__aenter__()
-
-                try:
+                async with Device.from_discovered_device(device_info) as device:
                     status = await device.get_status()
                     gaze_sensor = status.direct_gaze_sensor()
                     world_sensor = status.direct_world_sensor()
@@ -75,7 +71,8 @@ class PupilLabsDevice(IDeviceProvider):
                     if not world_sensor.connected:
                         raise RuntimeError("World sensor is not connected")
 
-                    self._device = device
+                    # Store sensor URLs without keeping device alive
+                    # The streaming functions will handle their own connections
                     self._sensor_urls = SensorURLs(
                         gaze_url=gaze_sensor.url,
                         world_url=world_sensor.url,
@@ -86,21 +83,14 @@ class PupilLabsDevice(IDeviceProvider):
                     logger.info(f"Gaze sensor URL: {self._sensor_urls.gaze_url}")
                     logger.info(f"World sensor URL: {self._sensor_urls.world_url}")
 
-                except Exception:
-                    await device.__aexit__(None, None, None)
-                    raise
-
         except Exception as e:
             logger.error(f"Failed to discover Pupil Labs device: {e}")
             raise
 
     async def close(self) -> None:
-        """Close device connection."""
+        """Close device provider and clear cached URLs."""
         async with self._lock:
-            if self._device is not None:
-                await self._device.__aexit__(None, None, None)
-                self._device = None
-                self._sensor_urls = None
+            self._sensor_urls = None
 
     async def __aenter__(self):
         """Async context manager entry."""

@@ -66,15 +66,15 @@ class GazeMapper:
             # Check bounds
             screen_w = homography_data["screen_w"]
             screen_h = homography_data["screen_h"]
-            on_surface = 0 <= screen_x <= screen_w and 0 <= screen_y <= screen_h
+            on_surface = bool(0 <= screen_x <= screen_w and 0 <= screen_y <= screen_h)
 
             # Determine if we should include homography based on mode
             include_homography = self._should_include_homography(homography_info)
 
             plane_coords = PlaneCoords(
                 uid=self._plane_uid,
-                x=screen_x if on_surface else None,
-                y=screen_y if on_surface else None,
+                x=screen_x,  # Always preserve mapped coordinates
+                y=screen_y,  # Always preserve mapped coordinates
                 on_surface=on_surface,
                 visible=True,
                 homography=homography_info if include_homography else None,
@@ -96,8 +96,8 @@ class GazeMapper:
             img_w = homography_data["img_w"]
             img_h = homography_data["img_h"]
             return SceneCoords(
-                x=gaze.x * img_w,
-                y=gaze.y * img_h,
+                x=float(gaze.x * img_w),
+                y=float(gaze.y * img_h),
                 frame="scene_px",
             )
         else:
@@ -131,7 +131,8 @@ class GazeMapper:
         current_np = np.array(current_matrix, dtype=np.float64)
         last_np = np.array(self._last_homography_matrix, dtype=np.float64)
 
-        if not np.allclose(current_np, last_np, rtol=1e-6, atol=1e-8):
+        allclose_result = np.allclose(current_np, last_np, rtol=1e-6, atol=1e-8)
+        if not bool(allclose_result.item() if hasattr(allclose_result, 'item') else allclose_result):
             # Meaningful change detected
             self._last_homography_matrix = current_matrix
             self._last_homography_seq += 1

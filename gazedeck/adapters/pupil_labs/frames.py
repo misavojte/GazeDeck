@@ -50,8 +50,9 @@ class PupilLabsFrameProvider(IFrameProvider):
             try:
                 # Extract frame data from Pupil Labs frame object
                 timestamp_ms = int(frame.timestamp_unix_seconds * 1000)
-                width = frame.width
-                height = frame.height
+                # Convert numpy scalars to Python native types
+                width = int(frame.width.item() if hasattr(frame.width, 'item') else frame.width)
+                height = int(frame.height.item() if hasattr(frame.height, 'item') else frame.height)
 
                 # Convert to BGR ndarray
                 # Assuming frame.bgr_pixels contains the pixel data
