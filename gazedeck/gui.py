@@ -183,11 +183,11 @@ class GazedeckAPI:
         """Check if Pupil Labs libraries are available"""
         try:
             self._log_api_call("check_pupil_availability")
-            
+
             result = pupil_integration.check_pupil_availability()
             self.logger.info(f"Pupil availability check: {result}")
-            return result
-            
+            return APIResponse.success(result["message"], result)
+
         except Exception as e:
             return self._handle_api_error("check_pupil_availability", e)
     
@@ -196,17 +196,21 @@ class GazedeckAPI:
         try:
             if timeout is None:
                 timeout = config.get('pupil.device_timeout', 10)
-            
+
             self._log_api_call("discover_pupil_device", timeout=timeout)
-            
+
             # Validate timeout
             if not isinstance(timeout, int) or timeout <= 0:
                 return APIResponse.error("Timeout must be a positive integer", "INVALID_TIMEOUT")
-            
+
             result = pupil_integration.discover_device(timeout)
             self.logger.info(f"Device discovery result: {result.get('success', False)}")
-            return result
-            
+
+            if result.get("success", False):
+                return APIResponse.success(result["message"], result.get("device_info", {}))
+            else:
+                return APIResponse.error(result.get("message", "Device discovery failed"))
+
         except Exception as e:
             return self._handle_api_error("discover_pupil_device", e)
     
@@ -214,11 +218,15 @@ class GazedeckAPI:
         """Setup gaze mapper with device calibration"""
         try:
             self._log_api_call("setup_gaze_mapper")
-            
+
             result = pupil_integration.setup_gaze_mapper()
             self.logger.info(f"Gaze mapper setup result: {result.get('success', False)}")
-            return result
-            
+
+            if result.get("success", False):
+                return APIResponse.success(result["message"])
+            else:
+                return APIResponse.error(result.get("message", "Gaze mapper setup failed"))
+
         except Exception as e:
             return self._handle_api_error("setup_gaze_mapper", e)
     
@@ -1175,13 +1183,13 @@ def get_html_content():
                         pupilConnected = true;
                         discoverBtn.disabled = true;
                         disconnectBtn.disabled = false;
-                        
+
                         // Show device info
-                        showDeviceInfo(result.device_info);
-                        
+                        showDeviceInfo(result.data);
+
                         // Show Step 3: Gaze Mapping Setup
                         document.getElementById('gazeMapperSection').style.display = 'block';
-                        
+
                         showMessage('pupilAvailabilityStatus', '✅ ' + result.message, true);
                     } else {
                         discoverBtn.disabled = false;
