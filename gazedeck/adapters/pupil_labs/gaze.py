@@ -4,11 +4,12 @@ import logging
 from typing import AsyncIterator
 
 try:
-    from pupil_labs.realtime_api.simple import receive_gaze_data
+    from pupil_labs_realtime_api.simple import receive_gaze_data
 except ImportError:
-    # Fallback for when pupil-labs is not installed
     receive_gaze_data = None
 
+from .device import PupilLabsDevice
+from ...ports.device_provider import SensorURLs
 from ...core.types import GazeSample
 from ...ports.gaze_provider import IGazeProvider
 
@@ -16,18 +17,18 @@ logger = logging.getLogger(__name__)
 
 
 class PupilLabsGazeProvider(IGazeProvider):
-    """Pupil Labs gaze data provider with auto-reconnect."""
+    """Pupil Labs gaze data provider using shared device provider."""
 
-    def __init__(self, url: str) -> None:
+    def __init__(self, device_provider: PupilLabsDevice) -> None:
         """Initialize Pupil Labs gaze provider.
 
         Args:
-            url: Pupil Labs device URL
+            device_provider: Shared device provider instance
         """
         if receive_gaze_data is None:
-            raise ImportError("pupil-labs package is required for PupilLabsGazeProvider")
+            raise ImportError("pupil-labs-realtime-api package is required for PupilLabsGazeProvider")
 
-        self._url = url
+        self._device_provider = device_provider
 
     async def stream(self) -> AsyncIterator[GazeSample]:
         """Stream gaze samples from Pupil Labs device.
@@ -36,11 +37,14 @@ class PupilLabsGazeProvider(IGazeProvider):
             GazeSample: Raw gaze data with timestamp, coordinates, and confidence
 
         Note:
-            Uses auto-reconnect with run_loop=True as specified in the API.
+            Uses shared device provider for sensor URL retrieval.
         """
-        logger.info(f"Connecting to Pupil Labs device at {self._url}")
+        # Get sensor URLs from shared device provider
+        sensor_urls = await self._device_provider.get_sensor_urls()
 
-        async for gaze_datum in receive_gaze_data(self._url, run_loop=True):
+        logger.info(f"Connecting to gaze sensor at {sensor_urls.gaze_url}")
+
+        async for gaze_datum in receive_gaze_data(sensor_urls.gaze_url, run_loop=True):
             try:
                 # Extract data from Pupil Labs gaze datum
                 # Based on Pupil Labs Real-Time API structure

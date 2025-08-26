@@ -28,7 +28,7 @@ This creates a virtual environment, installs dependencies, and sets up the packa
 make run
 ```
 
-This runs the pipeline with default settings (1920x1080 screen, auto tag rate, WebSocket on port 8765).
+This runs the pipeline with default settings (1920x1080 screen, auto tag rate, WebSocket on port 8765). The system will automatically discover and connect to available Pupil Labs devices on your network.
 
 ### Command Line Options
 
@@ -46,6 +46,53 @@ Available options:
 - `--min-markers`: Minimum markers required for homography (default: 3)
 - `--ws-port`: WebSocket server port (default: 8765)
 - `--homography-mode`: Homography inclusion mode ("every", "change", "none")
+
+**Note**: Pupil Labs devices are automatically discovered on the network. No manual URL configuration is required.
+
+### Device Discovery
+
+GazeDeck automatically discovers Pupil Labs devices on your network using the official Pupil Labs Real-Time API discovery mechanism:
+
+1. **Network Scanning**: Scans for available Pupil Labs devices
+2. **Device Selection**: Automatically connects to the first available device
+3. **Sensor Validation**: Verifies that required sensors (gaze and world camera) are connected
+4. **URL Retrieval**: Gets the proper streaming URLs from the device status
+
+#### Shared Device Provider Architecture
+
+GazeDeck uses a **shared device provider** pattern following hexagonal architecture principles:
+
+**Abstract Interface** (`ports/device_provider.py`):
+- **`IDeviceProvider`**: Abstract interface for device providers
+- **`SensorURLs`**: Data structure containing sensor URLs and device information
+
+**Concrete Implementation** (`adapters/pupil_labs/device.py`):
+- **`PupilLabsDevice`**: Pupil Labs specific implementation of IDeviceProvider
+
+**Provider Usage**:
+- **`PupilLabsGazeProvider`**: Uses shared device provider for gaze streaming
+- **`PupilLabsFrameProvider`**: Uses shared device provider for video streaming
+
+This architecture ensures:
+- **Consistency**: Both providers connect to the same device
+- **Efficiency**: Single device discovery operation
+- **Maintainability**: Centralized device management logic
+- **Extensibility**: Easy to add new device provider implementations
+- **Resource Management**: Proper cleanup of device connections
+
+If multiple devices are present, GazeDeck will connect to the first device it discovers. For more advanced multi-device scenarios, the codebase can be extended to support device selection.
+
+#### Troubleshooting Device Discovery
+
+If device discovery fails:
+
+1. **Ensure Pupil Labs Companion App is running** on the device
+2. **Check network connectivity** between your computer and the Pupil Labs device
+3. **Verify firewall settings** allow network discovery
+4. **Check device logs** for connection issues
+5. **Try restarting** both the Pupil Labs device and Companion App
+
+The system will timeout after 10 seconds if no device is found and provide clear error messages.
 
 ### Configuration File
 
@@ -138,10 +185,15 @@ When pose is invalid:
   - `gaze_provider.py`: Gaze data provider protocol
   - `frame_provider.py`: Scene frame provider protocol
   - `pose_provider.py`: Surface pose provider protocol
+  - `device_provider.py`: Device provider protocol for device discovery and management
   - `sink.py`: Event sink protocol
 
 - **adapters/**: Vendor-specific implementations
   - `pupil_labs/`: Pupil Labs Real-Time API adapters
+    - `device.py`: Shared device management and discovery
+    - `gaze.py`: Gaze data streaming using shared device provider
+    - `frames.py`: Video frame streaming using shared device provider
+    - `timebase.py`: Timebase utilities
   - `apriltag/`: AprilTag detection and pose estimation
   - `ws/`: WebSocket event broadcasting
 
@@ -200,6 +252,7 @@ Runtime dependencies are pinned for CI stability:
 - `websockets >= 12, < 13`
 - `opencv-python >= 4.9, < 5`
 - `pupil-apriltags >= 1.0, < 2`
+- `pupil-labs-realtime-api >= 1.0, < 2`
 - `numpy >= 1.26, < 3`
 - `typer[all] >= 0.12, < 1`
 - `pyyaml >= 6, < 7`

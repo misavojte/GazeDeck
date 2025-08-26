@@ -6,11 +6,12 @@ from typing import AsyncIterator, Tuple
 import numpy as np
 
 try:
-    from pupil_labs.realtime_api.simple import receive_video_frames
+    from pupil_labs_realtime_api.simple import receive_video_frames
 except ImportError:
-    # Fallback for when pupil-labs is not installed
     receive_video_frames = None
 
+from .device import PupilLabsDevice
+from ...ports.device_provider import SensorURLs
 from ...core.types import SceneFrame
 from ...ports.frame_provider import IFrameProvider
 
@@ -18,18 +19,18 @@ logger = logging.getLogger(__name__)
 
 
 class PupilLabsFrameProvider(IFrameProvider):
-    """Pupil Labs frame provider with auto-reconnect."""
+    """Pupil Labs frame provider using shared device provider."""
 
-    def __init__(self, url: str) -> None:
+    def __init__(self, device_provider: PupilLabsDevice) -> None:
         """Initialize Pupil Labs frame provider.
 
         Args:
-            url: Pupil Labs device URL
+            device_provider: Shared device provider instance
         """
         if receive_video_frames is None:
-            raise ImportError("pupil-labs package is required for PupilLabsFrameProvider")
+            raise ImportError("pupil-labs-realtime-api package is required for PupilLabsFrameProvider")
 
-        self._url = url
+        self._device_provider = device_provider
 
     async def stream(self) -> AsyncIterator[Tuple[SceneFrame, np.ndarray]]:
         """Stream scene frames from Pupil Labs device.
@@ -38,11 +39,14 @@ class PupilLabsFrameProvider(IFrameProvider):
             Tuple of (SceneFrame metadata, BGR pixel array)
 
         Note:
-            Uses auto-reconnect with run_loop=True as specified in the API.
+            Uses shared device provider for sensor URL retrieval.
         """
-        logger.info(f"Connecting to Pupil Labs device at {self._url}")
+        # Get sensor URLs from shared device provider
+        sensor_urls = await self._device_provider.get_sensor_urls()
 
-        async for frame in receive_video_frames(self._url, run_loop=True):
+        logger.info(f"Connecting to world sensor at {sensor_urls.world_url}")
+
+        async for frame in receive_video_frames(sensor_urls.world_url, run_loop=True):
             try:
                 # Extract frame data from Pupil Labs frame object
                 timestamp_ms = int(frame.timestamp_unix_seconds * 1000)

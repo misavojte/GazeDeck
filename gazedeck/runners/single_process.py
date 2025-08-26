@@ -8,6 +8,8 @@ import typer
 
 from ..adapters.apriltag.layouts import load_markers
 from ..adapters.apriltag.tracker import AprilTagPoseProvider
+from ..adapters.pupil_labs.device import PupilLabsDevice
+from ..ports.device_provider import IDeviceProvider
 from ..adapters.pupil_labs.frames import PupilLabsFrameProvider
 from ..adapters.pupil_labs.gaze import PupilLabsGazeProvider
 from ..adapters.ws.sink import WebSocketSink
@@ -232,9 +234,7 @@ def main(
     homography_mode: Literal["every", "change", "none"] = typer.Option(
         "every", help="Homography inclusion mode"
     ),
-    pupil_url: str = typer.Option(
-        "pi.local:8080", help="Pupil Labs device URL (for pupil-labs provider)"
-    ),
+
 ) -> None:
     """Run GazeDeck pipeline."""
     logging.basicConfig(level=logging.INFO)
@@ -261,9 +261,12 @@ def main(
         typer.echo(f"Failed to load markers: {e}", err=True)
         raise typer.Exit(1)
 
-    # Create components
-    gaze_provider = PupilLabsGazeProvider(pupil_url)
-    frame_provider = PupilLabsFrameProvider(pupil_url)
+    # Create shared device provider
+    device_provider = PupilLabsDevice()
+
+    # Create components using shared device provider
+    gaze_provider = PupilLabsGazeProvider(device_provider)
+    frame_provider = PupilLabsFrameProvider(device_provider)
 
     homography_store = HomographyStore(ttl_ms, max_err_px, min_markers)
     mapper = GazeMapper(homography_store, homography_mode=homography_mode)
@@ -314,6 +317,9 @@ def main(
 
             # Close WebSocket sink
             await ws_sink.close()
+
+            # Close device provider
+            await device_provider.close()
 
             # Cancel remaining tasks
             for task in asyncio.all_tasks():
