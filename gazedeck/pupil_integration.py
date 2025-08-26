@@ -104,26 +104,42 @@ class PupilLabsIntegration:
             self.device = discover_one_device(max_search_duration_seconds=timeout)
             
             if self.device:
-                # Get device info
-                device_info = self.device.get_system_info()
+                # Get device info using proper API attributes
+                serial_number = self.device.serial_number_glasses
+                battery_level = self.device.battery_level_percent
+                phone_name = self.device.phone_name
+                
+                # Handle cases where glasses might not be connected
+                # According to API docs, None or "default" means no glasses connected
+                # -1 might be a valid serial in some cases, so let's be more permissive
+                if serial_number in [None, "default"]:
+                    glasses_status = "No glasses connected"
+                    display_serial = "Not Connected"
+                else:
+                    glasses_status = f"Glasses connected: {serial_number}"
+                    display_serial = str(serial_number)
+                
                 self.device_info = PupilDeviceInfo(
-                    device_type=device_info.get('device_type', 'Unknown'),
-                    device_name=device_info.get('device_name', 'Pupil Device'),
-                    serial_number=device_info.get('serial_number', 'Unknown'),
-                    battery_level=device_info.get('battery_level_percent')
+                    device_type='Pupil Neon',
+                    device_name=phone_name,
+                    serial_number=display_serial,
+                    battery_level=battery_level
                 )
                 
                 self.is_connected = True
-                self.logger.info(f"Connected to {self.device_info.device_name}")
+                self.logger.info(f"Connected to {phone_name} - {glasses_status}")
                 
                 return {
                     "success": True,
-                    "message": f"Connected to {self.device_info.device_name}",
+                    "message": f"Connected to {phone_name}",
                     "device_info": {
                         "type": self.device_info.device_type,
                         "name": self.device_info.device_name,
                         "serial": self.device_info.serial_number,
-                        "battery": self.device_info.battery_level
+                        "battery": self.device_info.battery_level,
+                        "phone_name": phone_name,
+                        "battery_percent": battery_level,
+                        "glasses_status": glasses_status
                     }
                 }
             else:
@@ -137,6 +153,46 @@ class PupilLabsIntegration:
             return {
                 "success": False,
                 "message": f"Error discovering device: {str(e)}"
+            }
+    
+    def get_device_status(self) -> Dict[str, Any]:
+        """Get current device status (battery, memory, etc.)"""
+        if not self.device:
+            return {
+                "success": False,
+                "message": "No device connected"
+            }
+        
+        try:
+            # Get current status from device (automatically updated in background)
+            glasses_serial = self.device.serial_number_glasses
+            scene_cam_serial = self.device.serial_number_scene_cam
+            
+            status = {
+                "phone_name": self.device.phone_name,
+                "phone_id": self.device.phone_id,
+                "phone_ip": self.device.phone_ip,
+                "battery_level": self.device.battery_level_percent,
+                "battery_state": self.device.battery_state,
+                "memory_free_gb": round(self.device.memory_num_free_bytes / (1024**3), 2),
+                "memory_state": self.device.memory_state,
+                "serial_glasses": str(glasses_serial) if glasses_serial not in [None, "default"] else "Not Connected",
+                "serial_scene_cam": str(scene_cam_serial) if scene_cam_serial not in [None] else "Not Connected",
+                "is_streaming": self.device.is_currently_streaming,
+                "glasses_connected": glasses_serial not in [None, "default"],
+                "scene_cam_connected": scene_cam_serial not in [None]
+            }
+            
+            return {
+                "success": True,
+                "status": status
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Error getting device status: {e}")
+            return {
+                "success": False,
+                "message": f"Error getting device status: {str(e)}"
             }
     
     def setup_gaze_mapper(self) -> Dict[str, Any]:

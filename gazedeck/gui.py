@@ -214,6 +214,22 @@ class GazedeckAPI:
         except Exception as e:
             return self._handle_api_error("discover_pupil_device", e)
     
+    def get_pupil_device_status(self) -> Dict[str, Any]:
+        """Get current Pupil Labs device status"""
+        try:
+            self._log_api_call("get_pupil_device_status")
+            
+            result = pupil_integration.get_device_status()
+            self.logger.info(f"Device status result: {result.get('success', False)}")
+
+            if result.get("success", False):
+                return APIResponse.success("Device status retrieved", result.get("status", {}))
+            else:
+                return APIResponse.error(result.get("message", "Failed to get device status"))
+
+        except Exception as e:
+            return self._handle_api_error("get_pupil_device_status", e)
+    
     def setup_gaze_mapper(self) -> Dict[str, Any]:
         """Setup gaze mapper with device calibration"""
         try:
