@@ -794,6 +794,14 @@ def get_html_content():
                         <button class="button primary" id="discoverBtn" onclick="discoverPupilDevice()">🔍 Discover Pupil Device</button>
                         <button class="button danger" id="disconnectBtn" onclick="disconnectPupilDevice()" disabled>❌ Disconnect</button>
                     </div>
+                    <div id="pupilHelp" class="instruction">
+                        <p><strong>Finding device instructions:</strong></p>
+                        <ul>
+                            <li><strong>Companion app:</strong> Ensure the Pupil Labs Neon glasses are connected to the phone and the Companion app is running.</li>
+                            <li><strong>Same network:</strong> The computer and the phone must be on the same local network. Easiest setup: use a second phone to create a mobile hotspot and connect both devices to it.</li>
+                        </ul>
+                        <p>If no device is found and you suspect a bug, open <a href="http://neon.local:8080/" target="_blank" rel="noopener noreferrer">http://neon.local:8080/</a> in this computer's browser. If it doesn't load, the local network is not set up correctly.</p>
+                    </div>
                     <div id="pupilDeviceInfo" class="device-info" style="display: none;"></div>
                 </div>
             </div>
@@ -821,7 +829,6 @@ def get_html_content():
                     <label>Port:</label>
                     <input type="number" id="port" placeholder="8765">
                 </div>
-                <button class="button" onclick="updateConfig()">Update Config</button>
                 <div class="controls">
                     <button class="button primary" id="startBtn" onclick="startServer()">🚀 Start Server</button>
                     <button class="button danger" id="stopBtn" onclick="stopServer()" disabled>⏹️ Stop Server</button>
@@ -1553,31 +1560,32 @@ def get_html_content():
                 }
             }
             
-            async function updateConfig() {
-                const host = document.getElementById('host').value;
-                const port = document.getElementById('port').value;
-                
-                try {
-                    const result = await window.pywebview.api.update_config(host, port);
-                    showMessage('serverStatus', result.message, result.success);
-                    if (result.success) {
-                        config.host = host;
-                        config.port = parseInt(port);
-                    }
-                } catch (error) {
-                    console.error('Update config error:', error);
-                    showMessage('serverStatus', 'Failed to update config', false);
-                }
-            }
+
             
             async function startServer() {
                 try {
+                    // Get current host and port values from the form
+                    const host = document.getElementById('host').value;
+                    const port = document.getElementById('port').value;
+                    
+                    // Update configuration automatically
+                    const configResult = await window.pywebview.api.update_config(host, port);
+                    if (!configResult.success) {
+                        showMessage('serverStatus', '❌ Failed to update configuration: ' + configResult.message, false);
+                        return;
+                    }
+                    
+                    // Start the server
                     const result = await window.pywebview.api.start_server();
                     showMessage('serverStatus', result.message, result.success);
                     
                     if (result.success) {
                         document.getElementById('startBtn').disabled = true;
                         document.getElementById('stopBtn').disabled = false;
+                        
+                        // Update local config
+                        config.host = host;
+                        config.port = parseInt(port);
                         
                         // Show Step 5: Gaze Tracking
                         document.getElementById('gazeSection').style.display = 'block';
