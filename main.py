@@ -19,15 +19,11 @@ def signal_handler(signum, frame):
 # Register signal handler for SIGINT (Ctrl+C)
 signal.signal(signal.SIGINT, signal_handler)
 
-async def main():
+async def main(device, calibration):
     """Main async function that runs the gaze tracking with WebSocket server."""
 
-    # Initialize device and calibration
-    device_manager = DeviceManager()
-    device, calibration = device_manager.initialize()
-
     # Set up gaze mapping configuration
-    gaze_config = GazeConfig(calibration)
+    gaze_config = GazeConfig(calibration, config_path="apriltags/config.yaml")
     screen_surface = gaze_config.setup_surface()
 
     # Start WebSocket server
@@ -75,4 +71,8 @@ async def main():
         print("Shutdown complete. Goodbye!")
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    # Initialize device and calibration before starting async loop
+    device_manager = DeviceManager()
+    device, calibration = device_manager.initialize()
+
+    asyncio.run(main(device, calibration))

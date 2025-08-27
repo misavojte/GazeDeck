@@ -1,0 +1,127 @@
+screen_width: 1020
+screen_height: 780
+tag_size: 100
+rows: 2
+columns: 5
+margin: 10
+apriltags:
+  tag_0:
+    id: 0
+    description: Top-left corner
+    corners:
+    - - 10
+      - 10
+    - - 110
+      - 10
+    - - 110
+      - 110
+    - - 10
+      - 110
+  tag_1:
+    id: 1
+    description: Top edge, position 2
+    corners:
+    - - 235
+      - 10
+    - - 335
+      - 10
+    - - 335
+      - 110
+    - - 235
+      - 110
+  tag_2:
+    id: 2
+    description: Top edge, position 3
+    corners:
+    - - 460
+      - 10
+    - - 560
+      - 10
+    - - 560
+      - 110
+    - - 460
+      - 110
+  tag_3:
+    id: 3
+    description: Top edge, position 4
+    corners:
+    - - 685
+      - 10
+    - - 785
+      - 10
+    - - 785
+      - 110
+    - - 685
+      - 110
+  tag_4:
+    id: 4
+    description: Top-right corner
+    corners:
+    - - 910
+      - 10
+    - - 1010
+      - 10
+    - - 1010
+      - 110
+    - - 910
+      - 110
+  tag_5:
+    id: 5
+    description: Bottom-left corner
+    corners:
+    - - 10
+      - 670
+    - - 110
+      - 670
+    - - 110
+      - 770
+    - - 10
+      - 770
+  tag_6:
+    id: 6
+    description: Bottom edge, position 2
+    corners:
+    - - 235
+      - 670
+    - - 335
+      - 670
+    - - 335
+      - 770
+    - - 235
+      - 770
+  tag_7:
+    id: 7
+    description: Bottom edge, position 3
+    corners:
+    - - 460
+      - 670
+    - - 560
+      - 670
+    - - 560
+      - 770
+    - - 460
+      - 770
+  tag_8:
+    id: 8
+    description: Bottom edge, position 4
+    corners:
+    - - 685
+      - 670
+    - - 785
+      - 670
+    - - 785
+      - 770
+    - - 685
+      - 770
+  tag_9:
+    id: 9
+    description: Bottom-right corner
+    corners:
+    - - 910
+      - 670
+    - - 1010
+      - 670
+    - - 1010
+      - 770
+    - - 910
+      - 770

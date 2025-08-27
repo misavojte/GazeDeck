@@ -6,6 +6,8 @@ def discover_device():
     """Discover and return the Pupil Labs device."""
     print("Discovering device...")
     device = discover_one_device()
+    if device is None:
+        raise RuntimeError("No Pupil Labs device found. Please ensure a device is connected and running.")
     return device
 
 def get_calibration(device):

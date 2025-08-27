@@ -2,6 +2,7 @@
 
 from pupil_labs.real_time_screen_gaze import marker_generator
 from pupil_labs.real_time_screen_gaze.gaze_mapper import GazeMapper
+from config_utils import get_marker_vertices as get_marker_vertices_from_config, get_screen_size as get_screen_size_from_config, load_apriltag_config
 
 def generate_markers(marker_id=0):
     """Generate AprilTag markers."""
@@ -10,80 +11,37 @@ def generate_markers(marker_id=0):
     print(f"Generated marker with ID {marker_id}")
     return marker_pixels
 
-def get_marker_vertices():
-    """Get marker positions on screen.
+def get_marker_vertices(config_path="apriltags/config.yaml"):
+    """Get marker positions on screen from configuration file.
 
-    IMPORTANT: Update these coordinates to match where you actually placed your printed AprilTags
-    The coordinates are (x, y) where (0, 0) is top-left of your screen
-    Each marker needs 4 corners: [top-left, top-right, bottom-right, bottom-left]
-    Layout: 2x5 grid of 100x100px markers on 1020x780 screen
+    Args:
+        config_path: Path to the YAML configuration file
+
+    Returns:
+        Dictionary mapping marker IDs to their corner coordinates
     """
-    return {
-        0: [  # marker id 0 - Row 1, Col 1
-            (65, 90),      # Top left marker corner
-            (165, 90),     # Top right
-            (165, 190),    # Bottom right
-            (65, 190),     # Bottom left
-        ],
-        1: [  # marker id 1 - Row 1, Col 2
-            (295, 90),     # Top left marker corner
-            (395, 90),     # Top right
-            (395, 190),    # Bottom right
-            (295, 190),    # Bottom left
-        ],
-        2: [  # marker id 2 - Row 1, Col 3
-            (525, 90),     # Top left marker corner
-            (625, 90),     # Top right
-            (625, 190),    # Bottom right
-            (525, 190),    # Bottom left
-        ],
-        3: [  # marker id 3 - Row 1, Col 4
-            (755, 90),     # Top left marker corner
-            (855, 90),     # Top right
-            (855, 190),    # Bottom right
-            (755, 190),    # Bottom left
-        ],
-        4: [  # marker id 4 - Row 1, Col 5
-            (985, 90),     # Top left marker corner
-            (1085, 90),    # Top right
-            (1085, 190),   # Bottom right
-            (985, 190),    # Bottom left
-        ],
-        5: [  # marker id 5 - Row 2, Col 1
-            (65, 590),     # Top left marker corner
-            (165, 590),    # Top right
-            (165, 690),    # Bottom right
-            (65, 690),     # Bottom left
-        ],
-        6: [  # marker id 6 - Row 2, Col 2
-            (295, 590),    # Top left marker corner
-            (395, 590),    # Top right
-            (395, 690),    # Bottom right
-            (295, 690),    # Bottom left
-        ],
-        7: [  # marker id 7 - Row 2, Col 3
-            (525, 590),    # Top left marker corner
-            (625, 590),    # Top right
-            (625, 690),    # Bottom right
-            (525, 690),    # Bottom left
-        ],
-        8: [  # marker id 8 - Row 2, Col 4
-            (755, 590),    # Top left marker corner
-            (855, 590),    # Top right
-            (855, 690),    # Bottom right
-            (755, 690),    # Bottom left
-        ],
-        9: [  # marker id 9 - Row 2, Col 5
-            (985, 590),    # Top left marker corner
-            (1085, 590),   # Top right
-            (1085, 690),   # Bottom right
-            (985, 690),    # Bottom left
-        ],
-    }
+    try:
+        return get_marker_vertices_from_config(config_path)
+    except Exception as e:
+        print(f"Error loading marker vertices from config: {e}")
+        print("Make sure 'apriltags/config.yaml' exists and is properly formatted.")
+        raise
 
-def get_screen_size():
-    """Get the screen size for the gaze mapping surface."""
-    return (1020, 780)
+def get_screen_size(config_path="apriltags/config.yaml"):
+    """Get the screen size for the gaze mapping surface from configuration file.
+
+    Args:
+        config_path: Path to the YAML configuration file
+
+    Returns:
+        Tuple of (width, height)
+    """
+    try:
+        return get_screen_size_from_config(config_path)
+    except Exception as e:
+        print(f"Error loading screen size from config: {e}")
+        print("Make sure 'apriltags/config.yaml' exists and is properly formatted.")
+        raise
 
 def create_gaze_mapper(calibration):
     """Create and return a GazeMapper instance."""
@@ -95,12 +53,12 @@ def create_gaze_mapper(calibration):
 
     return gaze_mapper
 
-def add_surface(gaze_mapper, marker_verts=None, screen_size=None):
+def add_surface(gaze_mapper, marker_verts=None, screen_size=None, config_path="apriltags/config.yaml"):
     """Add a surface to the gaze mapper and return the surface."""
     if marker_verts is None:
-        marker_verts = get_marker_vertices()
+        marker_verts = get_marker_vertices(config_path)
     if screen_size is None:
-        screen_size = get_screen_size()
+        screen_size = get_screen_size(config_path)
 
     print("Adding surface...")
     screen_surface = gaze_mapper.add_surface(
@@ -123,15 +81,16 @@ def remove_surface(gaze_mapper, surface_uid):
 class GazeConfig:
     """Configuration and setup for gaze mapping."""
 
-    def __init__(self, calibration):
+    def __init__(self, calibration, config_path="apriltags/config.yaml"):
         self.gaze_mapper = create_gaze_mapper(calibration)
         self.screen_surface = None
         self.marker_pixels = None
+        self.config_path = config_path
 
     def setup_surface(self):
         """Set up the screen surface for gaze mapping."""
         self.marker_pixels = generate_markers()
-        self.screen_surface = add_surface(self.gaze_mapper)
+        self.screen_surface = add_surface(self.gaze_mapper, config_path=self.config_path)
         return self.screen_surface
 
     def cleanup(self):
