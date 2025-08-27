@@ -112,34 +112,71 @@ async def main():
     # IMPORTANT: Update these coordinates to match where you actually placed your printed AprilTags
     # The coordinates are (x, y) where (0, 0) is top-left of your screen
     # Each marker needs 4 corners: [top-left, top-right, bottom-right, bottom-left]
+    # Layout: 2x5 grid of 100x100px markers on 1020x780 screen
     marker_verts = {
-        0: [  # marker id 0 - TOP-LEFT corner of screen
-            (32, 32),   # Top left marker corner
-            (96, 32),   # Top right
-            (96, 96),   # Bottom right
-            (32, 96),   # Bottom left
+        0: [  # marker id 0 - Row 1, Col 1
+            (65, 90),      # Top left marker corner
+            (165, 90),     # Top right
+            (165, 190),    # Bottom right
+            (65, 190),     # Bottom left
         ],
-        1: [  # marker id 1 - TOP-RIGHT corner of screen
-            (1824, 32),   # Top left marker corner
-            (1888, 32),   # Top right
-            (1888, 96),   # Bottom right
-            (1824, 96),   # Bottom left
+        1: [  # marker id 1 - Row 1, Col 2
+            (295, 90),     # Top left marker corner
+            (395, 90),     # Top right
+            (395, 190),    # Bottom right
+            (295, 190),    # Bottom left
         ],
-        2: [  # marker id 2 - BOTTOM-LEFT corner of screen
-            (32, 984),   # Top left marker corner
-            (96, 984),   # Top right
-            (96, 1048),  # Bottom right
-            (32, 1048),  # Bottom left
+        2: [  # marker id 2 - Row 1, Col 3
+            (525, 90),     # Top left marker corner
+            (625, 90),     # Top right
+            (625, 190),    # Bottom right
+            (525, 190),    # Bottom left
         ],
-        3: [  # marker id 3 - BOTTOM-RIGHT corner of screen
-            (1824, 984),   # Top left marker corner
-            (1888, 984),   # Top right
-            (1888, 1048),  # Bottom right
-            (1824, 1048),  # Bottom left
+        3: [  # marker id 3 - Row 1, Col 4
+            (755, 90),     # Top left marker corner
+            (855, 90),     # Top right
+            (855, 190),    # Bottom right
+            (755, 190),    # Bottom left
+        ],
+        4: [  # marker id 4 - Row 1, Col 5
+            (985, 90),     # Top left marker corner
+            (1085, 90),    # Top right
+            (1085, 190),   # Bottom right
+            (985, 190),    # Bottom left
+        ],
+        5: [  # marker id 5 - Row 2, Col 1
+            (65, 590),     # Top left marker corner
+            (165, 590),    # Top right
+            (165, 690),    # Bottom right
+            (65, 690),     # Bottom left
+        ],
+        6: [  # marker id 6 - Row 2, Col 2
+            (295, 590),    # Top left marker corner
+            (395, 590),    # Top right
+            (395, 690),    # Bottom right
+            (295, 690),    # Bottom left
+        ],
+        7: [  # marker id 7 - Row 2, Col 3
+            (525, 590),    # Top left marker corner
+            (625, 590),    # Top right
+            (625, 690),    # Bottom right
+            (525, 690),    # Bottom left
+        ],
+        8: [  # marker id 8 - Row 2, Col 4
+            (755, 590),    # Top left marker corner
+            (855, 590),    # Top right
+            (855, 690),    # Bottom right
+            (755, 690),    # Bottom left
+        ],
+        9: [  # marker id 9 - Row 2, Col 5
+            (985, 590),    # Top left marker corner
+            (1085, 590),   # Top right
+            (1085, 690),   # Bottom right
+            (985, 690),    # Bottom left
         ],
     }
 
-    screen_size = (1920, 1080)
+    screen_size = (1020, 780)
 
     print("Adding surface...")
     screen_surface = gaze_mapper.add_surface(
@@ -166,7 +203,7 @@ async def main():
                     surface_gazes = result.mapped_gaze[screen_surface.uid]
                     for surface_gaze in surface_gazes:
                         x, y = surface_gaze.x, surface_gaze.y
-                        print(f"{x}, {y}")
+                        print(f"Server sending: {x:.3f}, {y:.3f}")
                         # Send gaze data to all connected WebSocket clients
                         await send_gaze_data(x, y)
 

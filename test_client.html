@@ -35,8 +35,8 @@
             border: 1px solid #f5c6cb;
         }
         .screen {
-            width: 1920px;
-            height: 1080px;
+            width: 1020px;
+            height: 780px;
             background: linear-gradient(45deg, #f8f9fa 25%, transparent 25%),
                         linear-gradient(-45deg, #f8f9fa 25%, transparent 25%),
                         linear-gradient(45deg, transparent 75%, #f8f9fa 75%),
@@ -47,8 +47,16 @@
             position: relative;
             margin: 20px auto;
             overflow: hidden;
-            transform: scale(0.5);
-            transform-origin: top left;
+            box-sizing: border-box;
+        }
+        .apriltag {
+            position: absolute;
+            width: 100px;
+            height: 100px;
+            opacity: 1;
+            pointer-events: none;
+            border: 1px solid #ff0000;
+            box-sizing: border-box;
         }
         .dot {
             position: absolute;
@@ -60,6 +68,7 @@
             transition: all 0.1s ease-out;
             box-shadow: 0 0 10px rgba(255, 68, 68, 0.5);
             opacity: 0;
+            z-index: 10;
         }
         .dot.smoothing {
             transition: all 0.15s ease-out;
@@ -115,20 +124,39 @@
         <div class="coordinates">
             <strong>X:</strong> <span id="xCoord">--</span> |
             <strong>Y:</strong> <span id="yCoord">--</span> |
-            <strong>Connected Clients:</strong> <span id="clientCount">--</span>
+            <strong>Connected Clients:</strong> <span id="clientCount">--</span> |
+            <strong>Screen:</strong> <span id="screenSize">--</span>
         </div>
 
         <div class="screen" id="screen">
+            <!-- AprilTag markers positioned EXACTLY according to main.py marker_verts coordinates -->
+            <!-- Each marker is 100x100px positioned at top-left corner coordinates -->
+            <img src="apriltags/apriltag_0.png" class="apriltag" style="left: 65px; top: 90px;" alt="AprilTag 0 (65,90)">
+            <img src="apriltags/apriltag_1.png" class="apriltag" style="left: 295px; top: 90px;" alt="AprilTag 1 (295,90)">
+            <img src="apriltags/apriltag_2.png" class="apriltag" style="left: 525px; top: 90px;" alt="AprilTag 2 (525,90)">
+            <img src="apriltags/apriltag_3.png" class="apriltag" style="left: 755px; top: 90px;" alt="AprilTag 3 (755,90)">
+            <img src="apriltags/apriltag_4.png" class="apriltag" style="left: 985px; top: 90px;" alt="AprilTag 4 (985,90)">
+
+            <img src="apriltags/apriltag_5.png" class="apriltag" style="left: 65px; top: 590px;" alt="AprilTag 5 (65,590)">
+            <img src="apriltags/apriltag_6.png" class="apriltag" style="left: 295px; top: 590px;" alt="AprilTag 6 (295,590)">
+            <img src="apriltags/apriltag_7.png" class="apriltag" style="left: 525px; top: 590px;" alt="AprilTag 7 (525,590)">
+            <img src="apriltags/apriltag_8.png" class="apriltag" style="left: 755px; top: 590px;" alt="AprilTag 8 (755,590)">
+            <img src="apriltags/apriltag_9.png" class="apriltag" style="left: 985px; top: 590px;" alt="AprilTag 9 (985,590)">
+
             <div class="dot" id="gazeDot"></div>
         </div>
 
         <div class="info">
             <p><strong>Instructions:</strong></p>
             <ul>
-                <li>The dot represents your gaze position on a 1920x1080 screen</li>
+                <li>The dot represents your gaze position on a <strong>1020x780 screen</strong></li>
+                <li><strong>10 AprilTags</strong> positioned EXACTLY at main.py marker_verts coordinates</li>
+                <li>Each AprilTag is <strong>100x100px</strong> with red border for visibility</li>
                 <li>Green = Connected, Red = Disconnected</li>
-                <li>Smoothing is applied for better visual experience</li>
-                <li>Screen is scaled to fit your browser window</li>
+                <li><strong>FIXED: Y-axis inverted</strong> - pupil labs uses inverted Y coordinates</li>
+                <li><strong>DEBUG: Check console</strong> for raw coordinate values</li>
+                <li>AprilTag positions: Row1(90px): 65,295,525,755,985px | Row2(590px): 65,295,525,755,985px</li>
+                <li>Test by looking at different AprilTag positions</li>
             </ul>
         </div>
     </div>
@@ -146,13 +174,15 @@
                 this.disconnectBtn = document.getElementById('disconnectBtn');
                 this.clearBtn = document.getElementById('clearBtn');
                 this.screen = document.getElementById('screen');
+                this.screenSize = document.getElementById('screenSize');
 
                 // Smoothing variables
-                this.currentX = 960;
-                this.currentY = 540;
+                this.currentX = 510;  // Center of 1020px width
+                this.currentY = 390;  // Center of 780px height
                 this.smoothing = 0.3; // Lower = smoother but more lag
 
                 this.bindEvents();
+                this.updateScreenSize();
             }
 
             bindEvents() {
@@ -213,12 +243,16 @@
 
             updateGazePosition(x, y) {
                 // Pupil Labs sends normalized coordinates (0-1 range)
-                // Convert to absolute screen coordinates (1920x1080)
-                const screenWidth = 1920;
-                const screenHeight = 1080;
+                // Convert to absolute screen coordinates (1020x780)
+                const screenWidth = 1020;
+                const screenHeight = 780;
 
+                // DEBUG: Log raw coordinates
+                console.log(`Raw gaze data - X: ${x.toFixed(3)}, Y: ${y.toFixed(3)}`);
+
+                // Try inverting Y axis - pupil labs might use inverted coordinate system
                 const absX = x * screenWidth;
-                const absY = y * screenHeight;
+                const absY = (1.0 - y) * screenHeight;  // INVERT Y AXIS
 
                 // Update coordinate display (show both relative and absolute)
                 this.xCoord.textContent = `${x.toFixed(3)} (${absX.toFixed(0)}px)`;
@@ -248,12 +282,17 @@
                 this.dot.classList.remove('smoothing');
             }
 
+            updateScreenSize() {
+                const rect = this.screen.getBoundingClientRect();
+                this.screenSize.textContent = `${rect.width.toFixed(0)}x${rect.height.toFixed(0)}px`;
+            }
+
             clearPath() {
                 // Reset to center position
-                this.currentX = 960;
-                this.currentY = 540;
-                this.dot.style.left = '960px';
-                this.dot.style.top = '540px';
+                this.currentX = 510;
+                this.currentY = 390;
+                this.dot.style.left = '510px';
+                this.dot.style.top = '390px';
             }
         }
 
