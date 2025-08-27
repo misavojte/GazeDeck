@@ -12,7 +12,7 @@ from typing import Dict, List, Tuple, Any
 from pathlib import Path
 
 
-def load_apriltag_config(config_path: str = "apriltags/config.yaml") -> Dict[str, Any]:
+def load_apriltag_config(config_path: str = "apriltags/apriltag_config.yaml") -> Dict[str, Any]:
     """
     Load AprilTag configuration from YAML file.
 
@@ -206,13 +206,13 @@ def validate_config(config: Dict[str, Any]) -> List[str]:
 
 
 # Convenience functions for easy access
-def get_marker_vertices(config_path: str = "apriltags/config.yaml") -> Dict[int, List[Tuple[int, int]]]:
+def get_marker_vertices(config_path: str = "apriltags/apriltag_config.yaml") -> Dict[int, List[Tuple[int, int]]]:
     """Load config and return marker vertices."""
     config = load_apriltag_config(config_path)
     return get_marker_vertices_from_config(config)
 
 
-def get_screen_size(config_path: str = "apriltags/config.yaml") -> Tuple[int, int]:
+def get_screen_size(config_path: str = "apriltags/apriltag_config.yaml") -> Tuple[int, int]:
     """Load config and return screen size."""
     config = load_apriltag_config(config_path)
     return get_screen_size_from_config(config)

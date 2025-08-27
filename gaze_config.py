@@ -11,7 +11,7 @@ def generate_markers(marker_id=0):
     print(f"Generated marker with ID {marker_id}")
     return marker_pixels
 
-def get_marker_vertices(config_path="apriltags/config.yaml"):
+def get_marker_vertices(config_path="apriltags/apriltag_config.yaml"):
     """Get marker positions on screen from configuration file.
 
     Args:
@@ -24,10 +24,10 @@ def get_marker_vertices(config_path="apriltags/config.yaml"):
         return get_marker_vertices_from_config(config_path)
     except Exception as e:
         print(f"Error loading marker vertices from config: {e}")
-        print("Make sure 'apriltags/config.yaml' exists and is properly formatted.")
+        print("Make sure 'apriltags/apriltag_config.yaml' exists and is properly formatted.")
         raise
 
-def get_screen_size(config_path="apriltags/config.yaml"):
+def get_screen_size(config_path="apriltags/apriltag_config.yaml"):
     """Get the screen size for the gaze mapping surface from configuration file.
 
     Args:
@@ -40,7 +40,7 @@ def get_screen_size(config_path="apriltags/config.yaml"):
         return get_screen_size_from_config(config_path)
     except Exception as e:
         print(f"Error loading screen size from config: {e}")
-        print("Make sure 'apriltags/config.yaml' exists and is properly formatted.")
+        print("Make sure 'apriltags/apriltag_config.yaml' exists and is properly formatted.")
         raise
 
 def create_gaze_mapper(calibration):
@@ -53,7 +53,7 @@ def create_gaze_mapper(calibration):
 
     return gaze_mapper
 
-def add_surface(gaze_mapper, marker_verts=None, screen_size=None, config_path="apriltags/config.yaml"):
+def add_surface(gaze_mapper, marker_verts=None, screen_size=None, config_path="apriltags/apriltag_config.yaml"):
     """Add a surface to the gaze mapper and return the surface."""
     if marker_verts is None:
         marker_verts = get_marker_vertices(config_path)
@@ -81,7 +81,7 @@ def remove_surface(gaze_mapper, surface_uid):
 class GazeConfig:
     """Configuration and setup for gaze mapping."""
 
-    def __init__(self, calibration, config_path="apriltags/config.yaml"):
+    def __init__(self, calibration, config_path="apriltags/apriltag_config.yaml"):
         self.gaze_mapper = create_gaze_mapper(calibration)
         self.screen_surface = None
         self.marker_pixels = None

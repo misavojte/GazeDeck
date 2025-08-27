@@ -23,7 +23,7 @@ async def main(device, calibration):
     """Main async function that runs the gaze tracking with WebSocket server."""
 
     # Set up gaze mapping configuration
-    gaze_config = GazeConfig(calibration, config_path="apriltags/config.yaml")
+    gaze_config = GazeConfig(calibration, config_path="apriltags/apriltag_config.yaml")
     screen_surface = gaze_config.setup_surface()
 
     # Start WebSocket server

@@ -323,7 +323,7 @@ def main():
 
         # Determine output directory and config file path
         output_dir = Path(args.output)
-        config_file_path = output_dir / 'config.yaml'
+        config_file_path = output_dir / 'apriltag_config.yaml'
         png_output_dir = str(output_dir)
 
         # Save configuration
@@ -344,7 +344,7 @@ def main():
         print(f"Total tags: {total_tags}")
         print(f"Layout: {args.rows}x{args.columns} around screen edges")
         print(f"Output directory: {args.output}")
-        print(f"Files created: config.yaml + {png_success_count} PNG files")
+        print(f"Files created: apriltag_config.yaml + {png_success_count} PNG files")
 
         if png_success_count != total_tags:
             print(f"Warning: {total_tags - png_success_count} PNG files failed to generate")
