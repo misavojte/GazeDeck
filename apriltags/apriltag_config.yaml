@@ -139,7 +139,7 @@ apriltags:
       - 440
   tag_14:
     id: 14
-    description: Right edge, row 2 (duplicate)
+    description: Right edge, row 2
     corners:
     - - 910
       - 340
