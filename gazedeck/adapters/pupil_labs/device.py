@@ -6,9 +6,11 @@ from typing import Optional
 
 try:
     from pupil_labs_realtime_api import Device, Network
+    from pupil_labs_realtime_api.simple import discover_one_device
 except ImportError:
     Device = None
     Network = None
+    discover_one_device = None
 
 from ...ports.device_provider import IDeviceProvider, SensorURLs
 
@@ -91,6 +93,34 @@ class PupilLabsDevice(IDeviceProvider):
         """Close device provider and clear cached URLs."""
         async with self._lock:
             self._sensor_urls = None
+
+    async def get_calibration(self) -> dict:
+        """Retrieve calibration from discovered device.
+
+        Uses realtime API simple discover helper for brevity.
+        """
+        if discover_one_device is None:
+            raise ImportError("pupil-labs-realtime-api package is required for calibration")
+
+        # The simple API is synchronous; run it in a thread to avoid blocking
+        loop = asyncio.get_running_loop()
+
+        def _blocking_get_calib():
+            dev = discover_one_device()
+            if dev is None:
+                raise RuntimeError("No Pupil Labs device found for calibration")
+            try:
+                calib = dev.get_calibration()
+            finally:
+                try:
+                    dev.close()
+                except Exception:
+                    pass
+            return calib
+
+        calibration = await loop.run_in_executor(None, _blocking_get_calib)
+        logger.info("Retrieved Pupil Labs calibration")
+        return calibration
 
     async def __aenter__(self):
         """Async context manager entry."""

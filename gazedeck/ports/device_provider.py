@@ -33,3 +33,12 @@ class IDeviceProvider(ABC):
     async def close(self) -> None:
         """Close device connection and cleanup resources."""
         ...
+
+    @abstractmethod
+    async def get_calibration(self) -> dict:
+        """Get device calibration including intrinsics and distortion.
+
+        Returns:
+            Dictionary containing calibration fields (implementation specific)
+        """
+        ...

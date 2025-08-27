@@ -280,6 +280,31 @@ def main(
         min_markers=min_markers,
     )
 
+    # Fetch calibration and provide to components
+    try:
+        # Use device provider to get calibration
+        calibration = asyncio.run(device_provider.get_calibration())  # This is already within asyncio; use create_task pattern
+    except RuntimeError:
+        calibration = None
+    except Exception as e:
+        logger.warning(f"Failed to retrieve calibration: {e}")
+        calibration = None
+
+    if calibration is not None:
+        try:
+            K = calibration["scene_camera_matrix"]
+            D = calibration["scene_distortion_coefficients"]
+            # Reshape if numpy arrays; tolerate python lists
+            if hasattr(K, "reshape"):
+                K = K.reshape(3, 3).tolist()
+            if hasattr(D, "reshape"):
+                D = D.reshape(-1).tolist()
+            pose_provider.set_calibration(K, D)
+            mapper.set_calibration(K, D)
+            logger.info("Applied calibration to pose provider and mapper")
+        except Exception as e:
+            logger.warning(f"Calibration present but unusable: {e}")
+
     ws_sink = WebSocketSink(port=ws_port)
 
     # Create queues

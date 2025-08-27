@@ -9,6 +9,7 @@ import numpy as np
 import pupil_apriltags
 
 from ...core.types import SceneFrame
+from ...core.geometry import undistort_points
 from ...ports.pose_provider import ISurfacePoseProvider, HomographyEstimate
 
 
@@ -146,6 +147,10 @@ class AprilTagPoseProvider(ISurfacePoseProvider):
         self._target_rate = tag_rate
         self._measured_fps: float | None = None
 
+        # Calibration (optional)
+        self._K: list[list[float]] | None = None
+        self._D: list[float] | None = None
+
         # AprilTag detector
         self._detector = pupil_apriltags.Detector(
             families="tag36h11",
@@ -156,6 +161,11 @@ class AprilTagPoseProvider(ISurfacePoseProvider):
             decode_sharpening=0.25,
             debug=False,
         )
+
+    def set_calibration(self, K: list[list[float]] | None, D: list[float] | None) -> None:
+        """Provide camera intrinsics and distortion for undistortion before homography."""
+        self._K = K
+        self._D = D
 
     async def stream(self) -> AsyncIterator[HomographyEstimate]:
         """Stream homography estimates.
@@ -202,6 +212,10 @@ class AprilTagPoseProvider(ISurfacePoseProvider):
             # Compute homography if enough points
             if len(image_points) >= self._min_markers * 4:
                 image_points_np = np.array(image_points, dtype=np.float32)
+                # Undistort detected corners if calibration available
+                if self._K is not None and self._D is not None:
+                    image_points_np = undistort_points(image_points_np, self._K, self._D)
+
                 screen_points_np = np.array(screen_points, dtype=np.float32)
 
                 # Find homography using RANSAC

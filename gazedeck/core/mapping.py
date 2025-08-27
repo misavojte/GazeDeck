@@ -3,7 +3,7 @@
 import numpy as np
 from typing import Literal
 
-from .geometry import apply_homography
+from .geometry import apply_homography, undistort_points
 from .homography_store import HomographyStore
 from .types import GazeSample, GazeEvent, SceneCoords, PlaneCoords, HomographyInfo
 
@@ -29,6 +29,13 @@ class GazeMapper:
         self._homography_mode = homography_mode
         self._last_homography_seq = -1
         self._last_homography_matrix: list[list[float]] | None = None
+        self._K: list[list[float]] | None = None
+        self._D: list[float] | None = None
+
+    def set_calibration(self, K: list[list[float]] | None, D: list[float] | None) -> None:
+        """Provide calibration to undistort gaze points before mapping."""
+        self._K = K
+        self._D = D
 
     def map(self, gaze: GazeSample, now_ms: int) -> GazeEvent:
         """Map gaze sample to screen coordinates.
@@ -45,6 +52,16 @@ class GazeMapper:
 
         # Convert scene coordinates to pixels if needed
         scene_coords = self._convert_scene_coords(gaze, homography_data)
+
+        # Optionally undistort using calibration
+        if (
+            homography_data is not None
+            and scene_coords.frame == "scene_px"
+            and self._K is not None
+            and self._D is not None
+        ):
+            undist = undistort_points([(scene_coords.x, scene_coords.y)], self._K, self._D)
+            scene_coords = SceneCoords(x=float(undist[0, 0]), y=float(undist[0, 1]), frame="scene_px")
 
         if homography_data is None:
             # No valid homography - return event with invisible plane
