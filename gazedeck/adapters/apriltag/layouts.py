@@ -2,20 +2,27 @@
 
 import json
 from pathlib import Path
-from typing import Dict
+from typing import Dict, NamedTuple
 
 import numpy as np
 
 
-def load_markers(path: str | Path) -> Dict[int, np.ndarray]:
-    """Load marker layout from JSON file.
+class ScreenConfig(NamedTuple):
+    """Configuration for a screen plane with AprilTags."""
+    plane_id: str
+    screen_width: int
+    screen_height: int
+    markers: Dict[int, np.ndarray]
+
+
+def load_screen_config(path: str | Path) -> ScreenConfig:
+    """Load screen configuration from JSON file.
 
     Args:
-        path: Path to JSON file containing marker layout
+        path: Path to JSON file containing screen configuration
 
     Returns:
-        Dictionary mapping tag id to 4×2 numpy array of screen corners.
-        Order is TL, TR, BR, BL.
+        ScreenConfig object containing plane_id, screen dimensions, and markers
 
     Raises:
         FileNotFoundError: If the layout file doesn't exist
@@ -24,16 +31,38 @@ def load_markers(path: str | Path) -> Dict[int, np.ndarray]:
     path_obj = Path(path)
 
     if not path_obj.exists():
-        raise FileNotFoundError(f"Marker layout file not found: {path}")
+        raise FileNotFoundError(f"Screen config file not found: {path}")
 
     with open(path_obj, "r") as f:
         data = json.load(f)
 
     if not isinstance(data, dict):
-        raise ValueError("Marker layout must be a JSON object")
+        raise ValueError("Screen config must be a JSON object")
+
+    # Parse required fields
+    if "plane_id" not in data:
+        raise ValueError("Screen config must contain 'plane_id'")
+    if "screen_width" not in data:
+        raise ValueError("Screen config must contain 'screen_width'")
+    if "screen_height" not in data:
+        raise ValueError("Screen config must contain 'screen_height'")
+    if "markers" not in data:
+        raise ValueError("Screen config must contain 'markers'")
+
+    plane_id = str(data["plane_id"])
+    screen_width = int(data["screen_width"])
+    screen_height = int(data["screen_height"])
+
+    if screen_width <= 0 or screen_height <= 0:
+        raise ValueError("Screen dimensions must be positive integers")
+
+    # Parse markers
+    markers_data = data["markers"]
+    if not isinstance(markers_data, dict):
+        raise ValueError("Markers must be a JSON object")
 
     markers = {}
-    for tag_id_str, corners in data.items():
+    for tag_id_str, corners in markers_data.items():
         try:
             tag_id = int(tag_id_str)
         except ValueError:
@@ -57,6 +86,14 @@ def load_markers(path: str | Path) -> Dict[int, np.ndarray]:
         markers[tag_id] = np.array(corners_array, dtype=np.float32)
 
     if not markers:
-        raise ValueError("No valid markers found in layout file")
+        raise ValueError("No valid markers found in config file")
 
-    return markers
+    return ScreenConfig(
+        plane_id=plane_id,
+        screen_width=screen_width,
+        screen_height=screen_height,
+        markers=markers
+    )
+
+
+

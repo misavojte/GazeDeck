@@ -6,7 +6,7 @@ from typing import Literal
 
 import typer
 
-from ..adapters.apriltag.layouts import load_markers
+from ..adapters.apriltag.layouts import load_screen_config
 from ..adapters.apriltag.tracker import AprilTagPoseProvider
 from ..adapters.pupil_labs.device import PupilLabsDevice
 from ..ports.device_provider import IDeviceProvider
@@ -220,8 +220,6 @@ async def websocket_drainer(
 @app.command()
 def main(
     provider: str = typer.Option("pupil-labs", help="Gaze provider type"),
-    screen_w: int = typer.Option(1920, help="Screen width in pixels"),
-    screen_h: int = typer.Option(1080, help="Screen height in pixels"),
     markers_json: str = typer.Option(
         "config/markers/screen_4tags.example.json",
         help="Path to markers JSON file"
@@ -254,11 +252,12 @@ def main(
             typer.echo(f"Invalid tag rate: {tag_rate}", err=True)
             raise typer.Exit(1)
 
-    # Load markers
+    # Load screen configuration
     try:
-        screen_markers = load_markers(markers_json)
+        screen_config = load_screen_config(markers_json)
+        logger.info(f"Loaded screen config: {screen_config.plane_id} ({screen_config.screen_width}x{screen_config.screen_height})")
     except Exception as e:
-        typer.echo(f"Failed to load markers: {e}", err=True)
+        typer.echo(f"Failed to load screen config: {e}", err=True)
         raise typer.Exit(1)
 
     # Create shared device provider
@@ -273,9 +272,7 @@ def main(
 
     pose_provider = AprilTagPoseProvider(
         frame_provider=frame_provider,
-        screen_markers=screen_markers,
-        screen_w=screen_w,
-        screen_h=screen_h,
+        screen_config=screen_config,
         tag_rate=parsed_tag_rate,
         min_markers=min_markers,
     )

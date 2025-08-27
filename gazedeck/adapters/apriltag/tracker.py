@@ -11,6 +11,7 @@ import pupil_apriltags
 from ...core.types import SceneFrame
 from ...core.geometry import undistort_points
 from ...ports.pose_provider import ISurfacePoseProvider, HomographyEstimate
+from .layouts import ScreenConfig
 
 
 class FPSMeter:
@@ -116,9 +117,7 @@ class AprilTagPoseProvider(ISurfacePoseProvider):
     def __init__(
         self,
         frame_provider,  # Type will be IFrameProvider when we import it
-        screen_markers: Dict[int, np.ndarray],
-        screen_w: int,
-        screen_h: int,
+        screen_config: ScreenConfig,
         tag_rate: Literal["auto"] | float = "auto",
         ransac_px: float = 3.0,
         min_markers: int = 3,
@@ -127,17 +126,16 @@ class AprilTagPoseProvider(ISurfacePoseProvider):
 
         Args:
             frame_provider: Frame provider instance
-            screen_markers: Dictionary mapping tag id to screen corner coordinates
-            screen_w: Screen width in pixels
-            screen_h: Screen height in pixels
+            screen_config: Screen configuration containing markers, dimensions, and plane ID
             tag_rate: Detection rate ("auto" or Hz)
             ransac_px: RANSAC threshold in pixels
             min_markers: Minimum markers required for homography
         """
         self._frame_provider = frame_provider
-        self._screen_markers = screen_markers
-        self._screen_w = screen_w
-        self._screen_h = screen_h
+        self._screen_config = screen_config
+        self._screen_markers = screen_config.markers
+        self._screen_w = screen_config.screen_width
+        self._screen_h = screen_config.screen_height
         self._ransac_px = ransac_px
         self._min_markers = min_markers
 

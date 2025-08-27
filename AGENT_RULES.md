@@ -231,12 +231,12 @@ adapters/pupil_labs/frames.py
 - Use receive_video_frames(url, run_loop=True). For each frame, read timestamp_unix_seconds (ms), width/height, and convert to an ndarray in BGR. Yield (SceneFrame, ndarray_bgr).
 
 adapters/apriltag/layouts.py
-- Load markers JSON: a dict mapping tag id to four screen pixel corners in the order TL, TR, BR, BL.
-- Provide load_markers(path) returning dict[int → 4×2 numpy array].
+- Load screen config JSON: contains plane_id, screen_width/height, and markers dict mapping tag id to four screen pixel corners in the order TL, TR, BR, BL.
+- Provide load_screen_config(path) returning ScreenConfig NamedTuple with plane_id, screen_width, screen_height, and markers dict.
 
 adapters/apriltag/tracker.py
 - Implement AprilTagPoseProvider (ISurfacePoseProvider).
-- Constructor parameters: frame_provider; screen_markers dict; screen_w/h; tag_rate (“auto” or float Hz); ransac_px; min_markers.
+- Constructor parameters: frame_provider; screen_config (ScreenConfig); tag_rate ("auto" or float Hz); ransac_px; min_markers.
 - Internals:
  • FPSMeter using EWMA to estimate measured scene FPS from frame timestamps
  • FrameSkipper to keep a fraction of frames so effective processed rate ≈ desired; desired = measured if tag_rate is “auto”, else desired = tag_rate
