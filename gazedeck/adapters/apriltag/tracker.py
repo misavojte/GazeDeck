@@ -119,7 +119,7 @@ class AprilTagPoseProvider(ISurfacePoseProvider):
         frame_provider,  # Type will be IFrameProvider when we import it
         screen_config: ScreenConfig,
         tag_rate: Literal["auto"] | float = "auto",
-        ransac_px: float = 3.0,
+        ransac_px: float = 50.0,
         min_markers: int = 3,
     ) -> None:
         """Initialize AprilTag pose provider.
@@ -192,13 +192,19 @@ class AprilTagPoseProvider(ISurfacePoseProvider):
             # Detect AprilTags
             gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
             tags = self._detector.detect(gray)
+            
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"Detected {len(tags)} AprilTags")
 
             # Build correspondences
             image_points = []
             screen_points = []
+            matched_tags = []
 
             for tag in tags:
                 tag_id = tag.tag_id
+                logger.debug(f"Found tag ID {tag_id}")
                 if tag_id in self._screen_markers:
                     # Use detected corners in image
                     image_corners = tag.corners
@@ -206,6 +212,11 @@ class AprilTagPoseProvider(ISurfacePoseProvider):
 
                     image_points.extend(image_corners)
                     screen_points.extend(screen_corners)
+                    matched_tags.append(tag_id)
+                else:
+                    logger.debug(f"Tag ID {tag_id} not in screen markers config")
+            
+            logger.info(f"Matched {len(matched_tags)} tags: {matched_tags}")
 
             # Compute homography if enough points
             if len(image_points) >= self._min_markers * 4:
@@ -217,11 +228,16 @@ class AprilTagPoseProvider(ISurfacePoseProvider):
                 screen_points_np = np.array(screen_points, dtype=np.float32)
 
                 # Find homography using RANSAC
+                logger.info(f"Computing homography with {len(image_points_np)} points from {len(matched_tags)} tags")
+                logger.info(f"RANSAC threshold: {self._ransac_px}px")
+                
                 H, mask = cv2.findHomography(
                     image_points_np,
                     screen_points_np,
                     cv2.RANSAC,
                     self._ransac_px,
+                    confidence=0.99,
+                    maxIters=2000
                 )
 
                 if H is not None:
@@ -237,6 +253,14 @@ class AprilTagPoseProvider(ISurfacePoseProvider):
                     # Count inliers
                     inliers = int(np.sum(mask).item())
                     markers_used = inliers // 4  # 4 corners per marker
+                    
+                    logger.info(f"RANSAC inliers: {inliers}/{len(image_points_np)} points")
+                    logger.info(f"Homography computed: {markers_used} markers, reproj_error={mean_reproj_px:.2f}px")
+                    
+                    # Log which points were rejected
+                    outliers = len(image_points_np) - inliers
+                    if outliers > 0:
+                        logger.warning(f"RANSAC rejected {outliers} points as outliers (threshold={self._ransac_px}px)")
 
                     yield HomographyEstimate(
                         ts_ms=scene_frame.ts_ms,
@@ -251,6 +275,7 @@ class AprilTagPoseProvider(ISurfacePoseProvider):
                     )
                 else:
                     # Homography computation failed
+                    logger.warning(f"Homography computation failed with {len(matched_tags)} matched tags")
                     yield HomographyEstimate(
                         ts_ms=scene_frame.ts_ms,
                         H=[[1, 0, 0], [0, 1, 0], [0, 0, 1]],  # Identity matrix
@@ -264,6 +289,7 @@ class AprilTagPoseProvider(ISurfacePoseProvider):
                     )
             else:
                 # Not enough markers detected
+                logger.info(f"Not enough markers: need {self._min_markers}, got {len(matched_tags)} matched tags")
                 yield HomographyEstimate(
                     ts_ms=scene_frame.ts_ms,
                     H=[[1, 0, 0], [0, 1, 0], [0, 0, 1]],  # Identity matrix

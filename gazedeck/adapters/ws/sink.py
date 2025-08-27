@@ -95,13 +95,12 @@ class WebSocketSink(ISink):
             logger.info(f"Removed {len(dead_clients)} dead clients")
 
     async def _handle_connection(
-        self, websocket: websockets.WebSocketServerProtocol, path: str
+        self, websocket: websockets.WebSocketServerProtocol
     ) -> None:
         """Handle individual WebSocket connection.
 
         Args:
             websocket: WebSocket connection
-            path: Request path (ignored)
         """
         logger.info(f"New client connected from {websocket.remote_address}")
         self._connected_clients.add(websocket)

@@ -25,6 +25,15 @@ class HomographyStore:
         Args:
             homography_estimate: Homography estimate with fields used by HomographyInfo
         """
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        visible = homography_estimate.get("visible", False)
+        markers = homography_estimate.get("markers", 0)
+        reproj_px = homography_estimate.get("reproj_px", 0.0)
+        
+        logger.info(f"HomographyStore.set: visible={visible}, markers={markers}, reproj_px={reproj_px:.2f}")
+        
         self._latest = homography_estimate
 
     def get_latest(self, now_ms: int) -> dict[str, Any] | None:
@@ -42,26 +51,39 @@ class HomographyStore:
         Returns:
             Valid homography estimate or None if invalid
         """
+        import logging
+        logger = logging.getLogger(__name__)
+        
         if self._latest is None:
+            logger.debug("HomographyStore.get_latest: No estimate stored")
             return None
 
         # Check visibility
-        if not self._latest.get("visible", False):
+        visible = self._latest.get("visible", False)
+        if not visible:
+            logger.debug("HomographyStore.get_latest: Rejected - not visible")
             return None
 
         # Check minimum markers
-        if self._latest.get("markers", 0) < self._min_markers:
+        markers = self._latest.get("markers", 0)
+        if markers < self._min_markers:
+            logger.debug(f"HomographyStore.get_latest: Rejected - insufficient markers ({markers} < {self._min_markers})")
             return None
 
         # Check reprojection error
-        if self._latest.get("reproj_px", float("inf")) > self._max_err_px:
+        reproj_px = self._latest.get("reproj_px", float("inf"))
+        if reproj_px > self._max_err_px:
+            logger.debug(f"HomographyStore.get_latest: Rejected - high reprojection error ({reproj_px:.2f} > {self._max_err_px})")
             return None
 
         # Check TTL
         age_ms = now_ms - self._latest.get("ts", 0)
         if age_ms > self._ttl_ms:
+            logger.debug(f"HomographyStore.get_latest: Rejected - too old ({age_ms}ms > {self._ttl_ms}ms)")
             return None
 
+        logger.debug(f"HomographyStore.get_latest: Valid estimate - markers={markers}, reproj_px={reproj_px:.2f}, age_ms={age_ms}")
+        
         # Update age_ms in the returned estimate
         result = self._latest.copy()
         result["age_ms"] = age_ms

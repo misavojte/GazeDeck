@@ -5,8 +5,8 @@ import logging
 from typing import Optional
 
 try:
-    from pupil_labs_realtime_api import Device, Network
-    from pupil_labs_realtime_api.simple import discover_one_device
+    from pupil_labs.realtime_api import Device, Network
+    from pupil_labs.realtime_api.simple import discover_one_device
 except ImportError:
     Device = None
     Network = None
@@ -60,7 +60,11 @@ class PupilLabsDevice(IDeviceProvider):
                 if device_info is None:
                     raise RuntimeError("No Pupil Labs device found on network")
 
-                logger.info(f"Found device: {device_info.name} at {device_info.address}")
+                # Avoid accessing non-existent fields on discovery info; log minimal details
+                try:
+                    logger.info(f"Found device: {getattr(device_info, 'name', 'unknown')}")
+                except Exception:
+                    logger.info("Found device via discovery")
 
                 # Create device instance and get sensor URLs
                 async with Device.from_discovered_device(device_info) as device:
@@ -78,8 +82,8 @@ class PupilLabsDevice(IDeviceProvider):
                     self._sensor_urls = SensorURLs(
                         gaze_url=gaze_sensor.url,
                         world_url=world_sensor.url,
-                        device_name=device_info.name,
-                        device_address=device_info.address,
+                        device_name=getattr(device, 'phone_name', 'unknown'),
+                        device_address=getattr(device, 'phone_ip', 'unknown'),
                     )
 
                     logger.info(f"Gaze sensor URL: {self._sensor_urls.gaze_url}")

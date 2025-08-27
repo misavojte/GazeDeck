@@ -28,9 +28,9 @@ test:
 
 run:
 	$(VENV_PYTHON) -m gazedeck.runners.single_process \
-		--screen-w 1920 \
-		--screen-h 1080 \
-		--markers-json gazedeck/config/markers/screen_4tags.example.json \
+		--screen-w 1080 \
+		--screen-h 720 \
+		--markers-json gazedeck/config/markers/base/config.json \
 		--tag-rate auto \
 		--ws-port 8765 \
 		--homography-mode every

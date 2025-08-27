@@ -229,8 +229,8 @@ def main(
     max_err_px: float = typer.Option(2.0, help="Maximum reprojection error in pixels"),
     min_markers: int = typer.Option(3, help="Minimum markers required"),
     ws_port: int = typer.Option(8765, help="WebSocket port"),
-    homography_mode: Literal["every", "change", "none"] = typer.Option(
-        "every", help="Homography inclusion mode"
+    homography_mode: str = typer.Option(
+        "every", help="Homography inclusion mode (every, change, none)"
     ),
 
 ) -> None:
@@ -251,6 +251,12 @@ def main(
         except ValueError:
             typer.echo(f"Invalid tag rate: {tag_rate}", err=True)
             raise typer.Exit(1)
+
+    # Validate homography mode
+    valid_homography_modes = ["every", "change", "none"]
+    if homography_mode not in valid_homography_modes:
+        typer.echo(f"Invalid homography mode: {homography_mode}. Must be one of: {', '.join(valid_homography_modes)}", err=True)
+        raise typer.Exit(1)
 
     # Load screen configuration
     try:

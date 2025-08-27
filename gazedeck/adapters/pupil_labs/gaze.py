@@ -4,9 +4,9 @@ import logging
 from typing import AsyncIterator, Optional
 
 try:
-    from pupil_labs_realtime_api.simple import receive_gaze_data
+    from pupil_labs.realtime_api.simple import discover_one_device
 except ImportError:
-    receive_gaze_data = None
+    discover_one_device = None
 
 from .device import PupilLabsDevice
 from .streaming import BaseStreamer, ReconnectionConfig, ConnectionLostError
@@ -28,8 +28,6 @@ class PupilLabsGazeStreamer(BaseStreamer):
             config: Reconnection configuration
         """
         super().__init__(url, config)
-        if receive_gaze_data is None:
-            raise ImportError("pupil-labs-realtime-api package is required for PupilLabsGazeStreamer")
 
     async def _stream_once(self) -> AsyncIterator[GazeSample]:
         """Stream gaze data from a single connection attempt.
@@ -40,22 +38,60 @@ class PupilLabsGazeStreamer(BaseStreamer):
         Raises:
             ConnectionLostError: When connection is lost
         """
+        if discover_one_device is None:
+            raise self._wrap_streaming_error(RuntimeError(
+                "Pupil Labs Simple API not available. Install 'pupil-labs-realtime-api' and try again."
+            ))
+
+        device = None
         try:
-            logger.debug(f"Starting gaze data stream from {self.url}")
-            async for gaze_datum in receive_gaze_data(self.url, run_loop=True):
+            logger.debug("Discovering Pupil Labs device for gaze stream...")
+            device = await self._discover_device()
+
+            logger.debug("Receiving gaze data...")
+            gaze_count = 0
+            while True:
+                gaze_datum = await self._receive_gaze_datum(device)
+                gaze_count += 1
+                if gaze_count % 100 == 0:
+                    logger.info(f"Received {gaze_count} gaze data points")
                 try:
-                    # Validate and extract gaze data
                     gaze_sample = self._process_gaze_datum(gaze_datum)
                     if gaze_sample:
                         yield gaze_sample
-
+                    else:
+                        logger.debug("Gaze datum was filtered out")
                 except Exception as e:
                     logger.warning(f"Failed to process gaze datum: {e}")
                     continue
 
         except Exception as e:
-            # Wrap connection errors appropriately
             raise self._wrap_streaming_error(e) from e
+        finally:
+            if device is not None:
+                try:
+                    device.close()
+                except Exception:
+                    pass
+
+    async def _discover_device(self):
+        """Discover and return a Simple API Device (runs in a thread)."""
+        import asyncio
+        loop = asyncio.get_running_loop()
+
+        def _block_discover():
+            return discover_one_device(max_search_duration_seconds=10)
+
+        device = await loop.run_in_executor(None, _block_discover)
+        if device is None:
+            raise RuntimeError("No Pupil Labs device found")
+        return device
+
+    async def _receive_gaze_datum(self, device):
+        """Receive one gaze datum from the device in a thread."""
+        import asyncio
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, device.receive_gaze_datum)
 
     def _process_gaze_datum(self, gaze_datum) -> Optional[GazeSample]:
         """Process and validate a single gaze datum.
@@ -69,14 +105,9 @@ class PupilLabsGazeStreamer(BaseStreamer):
         # Extract timestamp
         timestamp_ms = int(gaze_datum.timestamp_unix_seconds * 1000)
 
-        # Extract coordinates
+        # Extract coordinates (Simple API provides scene pixel coordinates)
         x = gaze_datum.x
         y = gaze_datum.y
-
-        # Validate coordinates are in expected range for normalized coordinates
-        if not (0.0 <= x <= 1.0 and 0.0 <= y <= 1.0):
-            logger.warning(f"Gaze coordinates out of range: x={x}, y={y}")
-            return None
 
         # Extract confidence
         confidence = getattr(gaze_datum, 'confidence', 1.0)
@@ -90,7 +121,7 @@ class PupilLabsGazeStreamer(BaseStreamer):
             ts_ms=timestamp_ms,
             x=x,
             y=y,
-            frame="scene_norm",  # Pupil Labs provides normalized coordinates
+            frame="scene_px",
             conf=confidence,
         )
 

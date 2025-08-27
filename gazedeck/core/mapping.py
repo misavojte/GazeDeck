@@ -49,6 +49,13 @@ class GazeMapper:
         """
         # Get latest valid homography
         homography_data = self._store.get_latest(now_ms)
+        
+        import logging
+        logger = logging.getLogger(__name__)
+        if homography_data is None:
+            logger.debug("GazeMapper.map: No valid homography available")
+        else:
+            logger.debug(f"GazeMapper.map: Using homography with {homography_data.get('markers', 0)} markers")
 
         # Convert scene coordinates to pixels if needed
         scene_coords = self._convert_scene_coords(gaze, homography_data)

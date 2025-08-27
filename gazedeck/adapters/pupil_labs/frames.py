@@ -6,9 +6,9 @@ from typing import AsyncIterator, Tuple, Optional
 import numpy as np
 
 try:
-    from pupil_labs_realtime_api.simple import receive_video_frames
+    from pupil_labs.realtime_api.simple import discover_one_device
 except ImportError:
-    receive_video_frames = None
+    discover_one_device = None
 
 from .device import PupilLabsDevice
 from .streaming import BaseStreamer, ReconnectionConfig, ConnectionLostError
@@ -30,8 +30,6 @@ class PupilLabsFrameStreamer(BaseStreamer):
             config: Reconnection configuration
         """
         super().__init__(url, config)
-        if receive_video_frames is None:
-            raise ImportError("pupil-labs-realtime-api package is required for PupilLabsFrameStreamer")
 
     async def _stream_once(self) -> AsyncIterator[Tuple[SceneFrame, np.ndarray]]:
         """Stream frame data from a single connection attempt.
@@ -42,22 +40,54 @@ class PupilLabsFrameStreamer(BaseStreamer):
         Raises:
             ConnectionLostError: When connection is lost
         """
+        if discover_one_device is None:
+            raise self._wrap_streaming_error(RuntimeError(
+                "Pupil Labs Simple API not available. Install 'pupil-labs-realtime-api' and try again."
+            ))
+
+        device = None
         try:
-            logger.debug(f"Starting video frame stream from {self.url}")
-            async for frame in receive_video_frames(self.url, run_loop=True):
+            logger.debug("Discovering Pupil Labs device for scene frames...")
+            device = await self._discover_device()
+
+            logger.debug("Receiving scene video frames...")
+            while True:
+                frame = await self._receive_scene_frame(device)
                 try:
-                    # Process and validate frame data
                     frame_data = self._process_frame(frame)
                     if frame_data:
                         yield frame_data
-
                 except Exception as e:
                     logger.warning(f"Failed to process frame: {e}")
                     continue
 
         except Exception as e:
-            # Wrap connection errors appropriately
             raise self._wrap_streaming_error(e) from e
+        finally:
+            if device is not None:
+                try:
+                    device.close()
+                except Exception:
+                    pass
+
+    async def _discover_device(self):
+        """Discover and return a Simple API Device (runs in a thread)."""
+        import asyncio
+        loop = asyncio.get_running_loop()
+
+        def _block_discover():
+            return discover_one_device(max_search_duration_seconds=10)
+
+        device = await loop.run_in_executor(None, _block_discover)
+        if device is None:
+            raise RuntimeError("No Pupil Labs device found")
+        return device
+
+    async def _receive_scene_frame(self, device):
+        """Receive one scene frame from the device in a thread."""
+        import asyncio
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, device.receive_scene_video_frame)
 
     def _process_frame(self, frame) -> Optional[Tuple[SceneFrame, np.ndarray]]:
         """Process and validate a single frame.
@@ -68,62 +98,61 @@ class PupilLabsFrameStreamer(BaseStreamer):
         Returns:
             Tuple of (SceneFrame, frame_array) if valid, None if should be skipped
         """
-        # Extract frame metadata
-        timestamp_ms = int(frame.timestamp_unix_seconds * 1000)
+        # Extract timestamp
+        timestamp_ms = int(getattr(frame, 'timestamp_unix_seconds', 0.0) * 1000)
 
-        # Convert numpy scalars to Python native types
-        width = int(frame.width.item() if hasattr(frame.width, 'item') else frame.width)
-        height = int(frame.height.item() if hasattr(frame.height, 'item') else frame.height)
-
-        # Validate dimensions
-        if width <= 0 or height <= 0:
-            logger.warning(f"Invalid frame dimensions: {width}x{height}")
-            return None
-
-        # Extract pixel data with improved error handling
-        frame_bgr = self._extract_pixel_data(frame, width, height)
+        # Try to extract pixel data first; infer width/height from array shape if possible
+        frame_bgr = self._extract_pixel_data(frame)
         if frame_bgr is None:
             return None
 
-        scene_frame = SceneFrame(
-            ts_ms=timestamp_ms,
-            w=width,
-            h=height,
-        )
+        height, width = frame_bgr.shape[:2]
 
+        scene_frame = SceneFrame(ts_ms=timestamp_ms, w=width, h=height)
         return scene_frame, frame_bgr
 
-    def _extract_pixel_data(self, frame, width: int, height: int) -> Optional[np.ndarray]:
-        """Extract pixel data from frame with robust error handling.
+    def _extract_pixel_data(self, frame) -> Optional[np.ndarray]:
+        """Extract pixel data from frame with robust attribute handling."""
+        # Direct numpy-like attributes
+        for attr in ('bgr_pixels', 'pixels', 'bgr', 'image_bgr', 'image'):
+            if hasattr(frame, attr):
+                data = getattr(frame, attr)
+                if data is not None:
+                    arr = np.array(data, dtype=np.uint8)
+                    # If already shaped (H, W, 3), just return
+                    if arr.ndim == 3 and arr.shape[2] in (3, 4):
+                        if arr.shape[2] == 4:
+                            # Drop alpha if present
+                            arr = arr[:, :, :3]
+                        return arr
 
-        Args:
-            frame: Raw frame object
-            width: Frame width
-            height: Frame height
+                    # Otherwise, try to reshape using any width/height attributes
+                    width = None
+                    height = None
+                    for w_attr in ('width', 'width_px', 'w', 'cols'):
+                        if hasattr(frame, w_attr):
+                            w_val = getattr(frame, w_attr)
+                            try:
+                                width = int(w_val.item() if hasattr(w_val, 'item') else w_val)
+                                break
+                            except Exception:
+                                continue
+                    for h_attr in ('height', 'height_px', 'h', 'rows'):
+                        if hasattr(frame, h_attr):
+                            h_val = getattr(frame, h_attr)
+                            try:
+                                height = int(h_val.item() if hasattr(h_val, 'item') else h_val)
+                                break
+                            except Exception:
+                                continue
 
-        Returns:
-            BGR pixel array or None if extraction fails
-        """
-        # Try multiple methods to extract pixel data
-        if hasattr(frame, 'bgr_pixels') and frame.bgr_pixels is not None:
-            try:
-                return np.array(frame.bgr_pixels, dtype=np.uint8).reshape(height, width, 3)
-            except (ValueError, TypeError) as e:
-                logger.warning(f"Failed to process bgr_pixels: {e}")
+                    if width and height and arr.size == width * height * 3:
+                        try:
+                            return arr.reshape(height, width, 3)
+                        except Exception as e:
+                            logger.warning(f"Failed to reshape pixel data: {e}")
 
-        if hasattr(frame, 'pixels') and frame.pixels is not None:
-            try:
-                pixels = np.array(frame.pixels, dtype=np.uint8)
-                expected_size = width * height * 3
-
-                if pixels.size == expected_size:
-                    return pixels.reshape(height, width, 3)
-                else:
-                    logger.warning(f"Pixel data size mismatch: got {pixels.size}, expected {expected_size}")
-            except (ValueError, TypeError) as e:
-                logger.warning(f"Failed to process pixels: {e}")
-
-        logger.warning("Frame object missing valid pixel data")
+        logger.warning("Frame object missing usable pixel data attributes")
         return None
 
 
