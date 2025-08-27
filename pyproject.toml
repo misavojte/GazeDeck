@@ -8,5 +8,6 @@ version = "0.1.0"
 description = "Real-time screen gaze tracking with Pupil Labs"
 dependencies = [
     "real-time-screen-gaze==1.1.2",
-    "pupil-labs-realtime-api==1.6.2"
+    "pupil-labs-realtime-api==1.6.2",
+    "websockets>=12.0"
 ]

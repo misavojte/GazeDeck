@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GazeDeck WebSocket Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f0f0f0;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .connected {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .disconnected {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .screen {
+            width: 1920px;
+            height: 1080px;
+            background: linear-gradient(45deg, #f8f9fa 25%, transparent 25%),
+                        linear-gradient(-45deg, #f8f9fa 25%, transparent 25%),
+                        linear-gradient(45deg, transparent 75%, #f8f9fa 75%),
+                        linear-gradient(-45deg, transparent 75%, #f8f9fa 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+            border: 2px solid #333;
+            position: relative;
+            margin: 20px auto;
+            overflow: hidden;
+            transform: scale(0.5);
+            transform-origin: top left;
+        }
+        .dot {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background: radial-gradient(circle, #ff4444, #cc0000);
+            border-radius: 50%;
+            pointer-events: none;
+            transition: all 0.1s ease-out;
+            box-shadow: 0 0 10px rgba(255, 68, 68, 0.5);
+            opacity: 0;
+        }
+        .dot.smoothing {
+            transition: all 0.15s ease-out;
+        }
+        .coordinates {
+            font-family: monospace;
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-size: 14px;
+        }
+        .controls {
+            margin: 20px 0;
+        }
+        button {
+            padding: 8px 16px;
+            margin: 0 5px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            background: #007bff;
+            color: white;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        .info {
+            font-size: 12px;
+            color: #666;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>GazeDeck WebSocket Test Client</h1>
+
+        <div id="status" class="status disconnected">
+            Connecting to ws://localhost:8765...
+        </div>
+
+        <div class="controls">
+            <button id="connectBtn">Connect</button>
+            <button id="disconnectBtn" disabled>Disconnect</button>
+            <button id="clearBtn">Clear Path</button>
+        </div>
+
+        <div class="coordinates">
+            <strong>X:</strong> <span id="xCoord">--</span> |
+            <strong>Y:</strong> <span id="yCoord">--</span> |
+            <strong>Connected Clients:</strong> <span id="clientCount">--</span>
+        </div>
+
+        <div class="screen" id="screen">
+            <div class="dot" id="gazeDot"></div>
+        </div>
+
+        <div class="info">
+            <p><strong>Instructions:</strong></p>
+            <ul>
+                <li>The dot represents your gaze position on a 1920x1080 screen</li>
+                <li>Green = Connected, Red = Disconnected</li>
+                <li>Smoothing is applied for better visual experience</li>
+                <li>Screen is scaled to fit your browser window</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        class GazeTestClient {
+            constructor() {
+                this.ws = null;
+                this.dot = document.getElementById('gazeDot');
+                this.status = document.getElementById('status');
+                this.xCoord = document.getElementById('xCoord');
+                this.yCoord = document.getElementById('yCoord');
+                this.clientCount = document.getElementById('clientCount');
+                this.connectBtn = document.getElementById('connectBtn');
+                this.disconnectBtn = document.getElementById('disconnectBtn');
+                this.clearBtn = document.getElementById('clearBtn');
+                this.screen = document.getElementById('screen');
+
+                // Smoothing variables
+                this.currentX = 960;
+                this.currentY = 540;
+                this.smoothing = 0.3; // Lower = smoother but more lag
+
+                this.bindEvents();
+            }
+
+            bindEvents() {
+                this.connectBtn.addEventListener('click', () => this.connect());
+                this.disconnectBtn.addEventListener('click', () => this.disconnect());
+                this.clearBtn.addEventListener('click', () => this.clearPath());
+            }
+
+            connect() {
+                if (this.ws) {
+                    this.ws.close();
+                }
+
+                this.ws = new WebSocket('ws://localhost:8765');
+                this.updateStatus('Connecting...', 'disconnected');
+
+                this.ws.onopen = () => {
+                    this.updateStatus('Connected to GazeDeck WebSocket server', 'connected');
+                    this.connectBtn.disabled = true;
+                    this.disconnectBtn.disabled = false;
+                    this.showDot();
+                };
+
+                this.ws.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        console.log('Received:', data); // Debug logging
+
+                        if (data.type === 'connection_established') {
+                            console.log('Connection confirmed:', data.message);
+                            this.updateStatus('Connected and confirmed by server', 'connected');
+                        } else if (data.type === 'gaze_data') {
+                            this.updateGazePosition(data.x, data.y);
+                        }
+                    } catch (e) {
+                        console.error('Failed to parse message:', e);
+                    }
+                };
+
+                this.ws.onclose = () => {
+                    this.updateStatus('Disconnected from WebSocket server', 'disconnected');
+                    this.connectBtn.disabled = false;
+                    this.disconnectBtn.disabled = true;
+                    this.hideDot();
+                };
+
+                this.ws.onerror = (error) => {
+                    this.updateStatus('WebSocket error occurred', 'disconnected');
+                    console.error('WebSocket error:', error);
+                };
+            }
+
+            disconnect() {
+                if (this.ws) {
+                    this.ws.close();
+                }
+            }
+
+            updateGazePosition(x, y) {
+                // Pupil Labs sends normalized coordinates (0-1 range)
+                // Convert to absolute screen coordinates (1920x1080)
+                const screenWidth = 1920;
+                const screenHeight = 1080;
+
+                const absX = x * screenWidth;
+                const absY = y * screenHeight;
+
+                // Update coordinate display (show both relative and absolute)
+                this.xCoord.textContent = `${x.toFixed(3)} (${absX.toFixed(0)}px)`;
+                this.yCoord.textContent = `${y.toFixed(3)} (${absY.toFixed(0)}px)`;
+
+                // Smooth the position using absolute coordinates
+                this.currentX += (absX - this.currentX) * this.smoothing;
+                this.currentY += (absY - this.currentY) * this.smoothing;
+
+                // Update dot position
+                this.dot.style.left = this.currentX + 'px';
+                this.dot.style.top = this.currentY + 'px';
+            }
+
+            updateStatus(message, className) {
+                this.status.textContent = message;
+                this.status.className = `status ${className}`;
+            }
+
+            showDot() {
+                this.dot.style.opacity = '1';
+                this.dot.classList.add('smoothing');
+            }
+
+            hideDot() {
+                this.dot.style.opacity = '0';
+                this.dot.classList.remove('smoothing');
+            }
+
+            clearPath() {
+                // Reset to center position
+                this.currentX = 960;
+                this.currentY = 540;
+                this.dot.style.left = '960px';
+                this.dot.style.top = '540px';
+            }
+        }
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new GazeTestClient();
+        });
+    </script>
+</body>
+</html>
