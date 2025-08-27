@@ -13,8 +13,8 @@ Options:
     --screen-width WIDTH     Screen width in pixels (default: 1020)
     --screen-height HEIGHT   Screen height in pixels (default: 780)
     --tag-size SIZE         Size of each tag in pixels (default: 100)
-    --rows ROWS             Number of tag rows around edges (default: 2)
-    --columns COLS          Number of tag columns around edges (default: 5)
+    --rows ROWS             Number of tag rows around edges (default: 2, minimum: 2)
+    --columns COLS          Number of tag columns around edges (default: 5, minimum: 2)
     --margin MARGIN         Margin from screen edges in pixels (default: 10)
     --output DIR            Output directory for config.yaml and PNG files (default: apriltags)
 
@@ -83,19 +83,28 @@ def calculate_edge_positions(screen_width: int, screen_height: int, tag_size: in
     - Bottom edge: 5 tags distributed evenly
     - Total: 10 tags
 
+    For layouts with more rows, additional tags are placed on left and right edges:
+    - Row 0: Top edge tags (distributed across all columns)
+    - Row 1: Bottom edge tags (distributed across all columns)
+    - Rows 2+: Left edge tag in column 0 + Right edge tag in last column
+
+    Inner positions (non-edge) are left empty.
+
     Args:
         screen_width: Screen width in pixels
         screen_height: Screen height in pixels
         tag_size: Size of each tag in pixels
-        rows: Number of rows (should be 2 for top/bottom edges)
-        columns: Number of columns (tags per edge)
+        rows: Number of rows (minimum 2 for top/bottom edges)
+        columns: Number of columns (minimum 2, tags per edge)
         margin: Margin from screen edges
 
     Returns:
-        Dictionary mapping tag IDs to corner coordinates
+        Dictionary mapping tag IDs to corner coordinates (only edge positions)
     """
-    if rows != 2:
-        raise ValueError("For edge placement, rows must be 2 (top and bottom edges)")
+    if rows < 2:
+        raise ValueError("For edge placement, rows must be at least 2")
+    if columns < 2:
+        raise ValueError("For edge placement, columns must be at least 2")
 
     positions = {}
 
@@ -108,7 +117,7 @@ def calculate_edge_positions(screen_width: int, screen_height: int, tag_size: in
 
     tag_id = 0
 
-    # Top edge tags (row 0)
+    # Top edge tags (distributed across columns)
     y_top = margin
     for col in range(columns):
         x_left = margin + col * spacing_x
@@ -123,7 +132,7 @@ def calculate_edge_positions(screen_width: int, screen_height: int, tag_size: in
         ]
         tag_id += 1
 
-    # Bottom edge tags (row 1)
+    # Bottom edge tags (distributed across columns)
     y_top = screen_height - margin - tag_size
     for col in range(columns):
         x_left = margin + col * spacing_x
@@ -138,10 +147,56 @@ def calculate_edge_positions(screen_width: int, screen_height: int, tag_size: in
         ]
         tag_id += 1
 
+    # For rows > 2, only add edge tags (left and right edges)
+    if rows > 2:
+        # Calculate vertical spacing for left and right edges
+        available_height = screen_height - 2 * margin
+        if rows > 3:
+            spacing_y = (available_height - tag_size) / (rows - 3)
+        else:
+            spacing_y = 0
+
+        # Left edge tags
+        x_left = margin
+        x_right = x_left + tag_size
+
+        # Right edge tags
+        x_left_right = screen_width - margin - tag_size
+        x_right_right = x_left_right + tag_size
+
+        for row in range(2, rows):
+            # Calculate Y position for this row
+            if rows == 3:
+                # For 3 rows total, place middle row in center
+                y_top = (screen_height - tag_size) // 2
+            else:
+                # For more rows, distribute evenly between top and bottom
+                y_top = margin + (row - 1) * spacing_y
+
+            y_bottom = y_top + tag_size
+
+            # Left edge tag (only for column 0 of this row)
+            left_tag_id = row * columns + 0
+            positions[left_tag_id] = [
+                (int(x_left), int(y_top)),      # Top-left
+                (int(x_right), int(y_top)),     # Top-right
+                (int(x_right), int(y_bottom)),  # Bottom-right
+                (int(x_left), int(y_bottom))    # Bottom-left
+            ]
+
+            # Right edge tag (only for last column of this row)
+            right_tag_id = row * columns + (columns - 1)
+            positions[right_tag_id] = [
+                (int(x_left_right), int(y_top)),      # Top-left
+                (int(x_right_right), int(y_top)),     # Top-right
+                (int(x_right_right), int(y_bottom)),  # Bottom-right
+                (int(x_left_right), int(y_bottom))    # Bottom-left
+            ]
+
     return positions
 
 
-def get_edge_description(row: int, col: int, columns: int) -> str:
+def get_edge_description(row: int, col: int, columns: int, rows: int) -> str:
     """Get description for edge-placed tag."""
     if row == 0:  # Top edge
         if col == 0:
@@ -150,13 +205,18 @@ def get_edge_description(row: int, col: int, columns: int) -> str:
             return "Top-right corner"
         else:
             return f"Top edge, position {col + 1}"
-    else:  # Bottom edge
+    elif row == 1:  # Bottom edge
         if col == 0:
             return "Bottom-left corner"
         elif col == columns - 1:
             return "Bottom-right corner"
         else:
             return f"Bottom edge, position {col + 1}"
+    elif row >= 2:  # Left and right edges for additional rows
+        if col == 0:
+            return f"Left edge, row {row}"
+        else:
+            return f"Right edge, row {row}"
 
 
 def generate_config(screen_width: int, screen_height: int, tag_size: int,
@@ -191,17 +251,16 @@ def generate_config(screen_width: int, screen_height: int, tag_size: int,
         'apriltags': {}
     }
 
-    # Add each tag to config
-    tag_id = 0
-    for row in range(rows):
-        for col in range(columns):
-            tag_name = f"tag_{tag_id}"
-            config['apriltags'][tag_name] = {
-                'id': tag_id,
-                'description': get_edge_description(row, col, columns),
-                'corners': [list(corner) for corner in marker_positions[tag_id]]  # Convert tuples to lists
-            }
-            tag_id += 1
+    # Add each tag to config (only for positions that exist)
+    for tag_id, corners in marker_positions.items():
+        row = tag_id // columns
+        col = tag_id % columns
+        tag_name = f"tag_{tag_id}"
+        config['apriltags'][tag_name] = {
+            'id': tag_id,
+            'description': get_edge_description(row, col, columns, rows),
+            'corners': [list(corner) for corner in corners]  # Convert tuples to lists
+        }
 
 
 
@@ -342,7 +401,7 @@ def main():
         # Show summary
         print("\nConfiguration and PNG generation completed!")
         print(f"Total tags: {total_tags}")
-        print(f"Layout: {args.rows}x{args.columns} around screen edges")
+        print(f"Layout: {args.rows}x{args.columns} grid (only edge positions filled)")
         print(f"Output directory: {args.output}")
         print(f"Files created: apriltag_config.yaml + {png_success_count} PNG files")
 

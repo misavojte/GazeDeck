@@ -1,7 +1,7 @@
 screen_width: 1020
 screen_height: 780
 tag_size: 100
-rows: 2
+rows: 3
 columns: 5
 margin: 10
 apriltags:
@@ -125,3 +125,27 @@ apriltags:
       - 770
     - - 910
       - 770
+  tag_10:
+    id: 10
+    description: Left edge, row 2
+    corners:
+    - - 10
+      - 340
+    - - 110
+      - 340
+    - - 110
+      - 440
+    - - 10
+      - 440
+  tag_14:
+    id: 14
+    description: Right edge, row 2 (duplicate)
+    corners:
+    - - 910
+      - 340
+    - - 1010
+      - 340
+    - - 1010
+      - 440
+    - - 910
+      - 440
