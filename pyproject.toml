@@ -1,0 +1,12 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gaze-deck"
+version = "0.1.0"
+description = "Real-time screen gaze tracking with Pupil Labs"
+dependencies = [
+    "real-time-screen-gaze==1.1.2",
+    "pupil-labs-realtime-api==1.6.2"
+]
