@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GazeDeck Marker Layout Test</title>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .marker-window {
+            width: 1080px;
+            height: 720px;
+            background-color: #ffffff;
+            border: 2px solid #333;
+            border-radius: 8px;
+            position: relative;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+
+        .marker {
+            position: absolute;
+            background-size: cover;
+            background-repeat: no-repeat;
+            border: 1px solid rgba(255, 0, 0, 0.3);
+            box-sizing: border-box;
+        }
+
+        .marker:hover {
+            border-color: rgba(255, 0, 0, 0.8);
+            z-index: 10;
+        }
+
+        .marker-label {
+            position: absolute;
+            top: -20px;
+            left: 0;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .status.connected {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status.disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .status.connecting {
+            background-color: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+
+        .controls {
+            margin: 20px 0;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .connect-btn {
+            background-color: #007bff;
+            color: white;
+        }
+
+        .connect-btn:hover {
+            background-color: #0056b3;
+        }
+
+        .disconnect-btn {
+            background-color: #dc3545;
+            color: white;
+        }
+
+        .disconnect-btn:hover {
+            background-color: #c82333;
+        }
+
+        .clear-btn {
+            background-color: #6c757d;
+            color: white;
+        }
+
+        .clear-btn:hover {
+            background-color: #545b62;
+        }
+
+        #messages {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            height: 300px;
+            width: 1080px;
+            overflow-y: auto;
+            padding: 10px;
+            background-color: #f8f9fa;
+            font-size: 12px;
+            line-height: 1.4;
+            margin-top: 20px;
+        }
+
+        .message {
+            margin: 5px 0;
+            padding: 8px;
+            border-left: 3px solid #007bff;
+            background-color: #e9ecef;
+            border-radius: 0 4px 4px 0;
+            white-space: pre-wrap;
+        }
+
+        .message.valid {
+            border-left-color: #28a745;
+            background-color: #d4edda;
+        }
+
+        .message.invalid {
+            border-left-color: #dc3545;
+            background-color: #f8d7da;
+        }
+
+        .gaze-overlay {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background-color: rgba(255, 0, 0, 0.7);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 100;
+            display: none;
+        }
+
+        .gaze-info {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            width: 1080px;
+        }
+
+        .json-toggle {
+            margin: 10px 0;
+        }
+
+        .stats {
+            display: flex;
+            gap: 20px;
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #e9ecef;
+            border-radius: 4px;
+            justify-content: center;
+        }
+
+        .stat {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #007bff;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #666;
+            text-transform: uppercase;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>GazeDeck Marker Layout Test</h1>
+        <p>1080x720 marker window with markers positioned EXACTLY as in config.json</p>
+    </div>
+
+    <div class="marker-window" id="markerWindow">
+        <!-- Markers will be dynamically added here -->
+        <div class="gaze-overlay" id="gazeOverlay"></div>
+    </div>
+
+    <div id="status" class="status disconnected">Disconnected</div>
+
+    <div class="controls">
+        <button id="connectBtn" class="connect-btn">Connect</button>
+        <button id="disconnectBtn" class="disconnect-btn">Disconnect</button>
+        <button id="clearBtn" class="clear-btn">Clear Messages</button>
+        <label class="json-toggle">
+            <input type="checkbox" id="prettyPrintToggle" checked> Pretty Print JSON
+        </label>
+        <label class="json-toggle">
+            <input type="checkbox" id="showGazeOverlay" checked> Show Gaze Overlay
+        </label>
+    </div>
+
+    <div class="stats">
+        <div class="stat">
+            <div class="stat-value" id="messageCount">0</div>
+            <div class="stat-label">Messages</div>
+        </div>
+        <div class="stat">
+            <div class="stat-value" id="validCount">0</div>
+            <div class="stat-label">Valid</div>
+        </div>
+        <div class="stat">
+            <div class="stat-value" id="invalidCount">0</div>
+            <div class="stat-label">Invalid</div>
+        </div>
+        <div class="stat">
+            <div class="stat-value" id="avgConfidence">0.00</div>
+            <div class="stat-label">Avg Conf</div>
+        </div>
+    </div>
+
+    <div id="currentGaze" class="gaze-info" style="display: none;">
+        <strong>Latest Gaze Event:</strong>
+        <div>Scene Coordinates: <span id="sceneCoords">x: 0.00, y: 0.00</span> |
+            Screen Coordinates: <span id="screenCoords">x: null, y: null</span></div>
+        <div>Confidence: <span id="confidence">0.00</span> |
+            On Surface: <span id="onSurface">false</span> |
+            Visible: <span id="visible">false</span></div>
+    </div>
+
+    <div id="messages"></div>
+
+    <script>
+        // Marker configuration from config.json - EXACT positions
+        const markerConfig = {
+            "plane_id": "screen_10apriltag_1080x720_inside",
+            "screen_width": 1080,
+            "screen_height": 720,
+            "markers": {
+                "0": [[0, 0], [150, 0], [150, 150], [0, 150]],           // Top-left corner
+                "1": [[930, 0], [1080, 0], [1080, 150], [930, 150]],     // Top-right corner
+                "2": [[0, 570], [150, 570], [150, 720], [0, 720]],       // Bottom-left corner
+                "3": [[930, 570], [1080, 570], [1080, 720], [930, 720]], // Bottom-right corner
+                "4": [[0, 285], [150, 285], [150, 435], [0, 435]],       // Left-center edge
+                "5": [[930, 285], [1080, 285], [1080, 435], [930, 435]], // Right-center edge
+                "6": [[310, 0], [460, 0], [460, 150], [310, 150]],       // Top-left inner
+                "7": [[620, 0], [770, 0], [770, 150], [620, 150]],       // Top-right inner
+                "8": [[310, 570], [460, 570], [460, 720], [310, 720]],   // Bottom-left inner
+                "9": [[620, 570], [770, 570], [770, 720], [620, 720]]     // Bottom-right inner
+            }
+        };
+
+        class MarkerLayoutTester {
+            constructor() {
+                this.ws = null;
+                this.messageCount = 0;
+                this.validCount = 0;
+                this.invalidCount = 0;
+                this.confidenceSum = 0;
+                this.prettyPrint = true;
+                this.showGazeOverlay = true;
+
+                this.connectBtn = document.getElementById('connectBtn');
+                this.disconnectBtn = document.getElementById('disconnectBtn');
+                this.clearBtn = document.getElementById('clearBtn');
+                this.prettyPrintToggle = document.getElementById('prettyPrintToggle');
+                this.showGazeOverlayToggle = document.getElementById('showGazeOverlay');
+                this.statusDiv = document.getElementById('status');
+                this.messagesDiv = document.getElementById('messages');
+                this.currentGazeDiv = document.getElementById('currentGaze');
+                this.markerWindow = document.getElementById('markerWindow');
+                this.gazeOverlay = document.getElementById('gazeOverlay');
+
+                this.bindEvents();
+                this.setupMarkers();
+            }
+
+            setupMarkers() {
+                const markersContainer = this.markerWindow;
+
+                // Clear existing markers
+                const existingMarkers = markersContainer.querySelectorAll('.marker');
+                existingMarkers.forEach(marker => marker.remove());
+
+                // Generate markers positioned at window edges
+                this.generateEdgeMarkers();
+            }
+
+            generateEdgeMarkers() {
+                const screenWidth = markerConfig.screen_width;
+                const screenHeight = markerConfig.screen_height;
+                const markerSize = 150; // Based on generator logic
+
+                // Define marker positions EXACTLY matching config.json
+                // For 1080x720 screen with 150px markers:
+                const edgePositions = [
+                    // Corner markers (0, 1, 2, 3) - EXACT positions from config.json
+                    { id: '0', x: 0, y: 0, width: markerSize, height: markerSize }, // Top-left: (0,0) to (150,150)
+                    { id: '1', x: 930, y: 0, width: markerSize, height: markerSize }, // Top-right: (930,0) to (1080,150)
+                    { id: '2', x: 0, y: 570, width: markerSize, height: markerSize }, // Bottom-left: (0,570) to (150,720)
+                    { id: '3', x: 930, y: 570, width: markerSize, height: markerSize }, // Bottom-right: (930,570) to (1080,720)
+
+                    // Left and right center markers (4, 5) - EXACT positions from config.json
+                    { id: '4', x: 0, y: 285, width: markerSize, height: markerSize }, // Left-center: (0,285) to (150,435)
+                    { id: '5', x: 930, y: 285, width: markerSize, height: markerSize }, // Right-center: (930,285) to (1080,435)
+
+                    // Top inner markers (6, 7) - EXACT positions from config.json
+                    { id: '6', x: 310, y: 0, width: markerSize, height: markerSize }, // Top-left inner: (310,0) to (460,150)
+                    { id: '7', x: 620, y: 0, width: markerSize, height: markerSize }, // Top-right inner: (620,0) to (770,150)
+
+                    // Bottom inner markers (8, 9) - EXACT positions from config.json
+                    { id: '8', x: 310, y: 570, width: markerSize, height: markerSize }, // Bottom-left inner: (310,570) to (460,720)
+                    { id: '9', x: 620, y: 570, width: markerSize, height: markerSize } // Bottom-right inner: (620,570) to (770,720)
+                ];
+
+                // Create markers at EXACT generator positions
+                edgePositions.forEach(pos => {
+                    this.createEdgeMarker(pos.id, pos.x, pos.y, pos.width, pos.height);
+                });
+            }
+
+            createEdgeMarker(markerId, x, y, width, height) {
+                // Create marker element positioned at window edge
+                const markerDiv = document.createElement('div');
+                markerDiv.className = 'marker';
+                markerDiv.style.left = x + 'px';
+                markerDiv.style.top = y + 'px';
+                markerDiv.style.width = width + 'px';
+                markerDiv.style.height = height + 'px';
+                markerDiv.style.backgroundImage = `url('./config/markers/base/markers/${markerId}.png')`;
+
+                // Add label
+                const labelDiv = document.createElement('div');
+                labelDiv.className = 'marker-label';
+                labelDiv.textContent = markerId;
+                markerDiv.appendChild(labelDiv);
+
+                // Add to container
+                this.markerWindow.appendChild(markerDiv);
+            }
+
+            bindEvents() {
+                this.connectBtn.addEventListener('click', () => this.connect());
+                this.disconnectBtn.addEventListener('click', () => this.disconnect());
+                this.clearBtn.addEventListener('click', () => this.clearMessages());
+                this.prettyPrintToggle.addEventListener('change', (e) => {
+                    this.prettyPrint = e.target.checked;
+                });
+                this.showGazeOverlayToggle.addEventListener('change', (e) => {
+                    this.showGazeOverlay = e.target.checked;
+                });
+            }
+
+            connect() {
+                if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                    return;
+                }
+
+                this.updateStatus('Connecting...', 'connecting');
+
+                try {
+                    this.ws = new WebSocket('ws://localhost:8765');
+
+                    this.ws.onopen = () => {
+                        this.updateStatus('Connected to GazeDeck WebSocket', 'connected');
+                        this.connectBtn.disabled = true;
+                        this.disconnectBtn.disabled = false;
+                    };
+
+                    this.ws.onmessage = (event) => {
+                        this.handleMessage(event.data);
+                    };
+
+                    this.ws.onclose = () => {
+                        this.updateStatus('Disconnected', 'disconnected');
+                        this.connectBtn.disabled = false;
+                        this.disconnectBtn.disabled = true;
+                    };
+
+                    this.ws.onerror = (error) => {
+                        console.error('WebSocket error:', error);
+                        this.updateStatus('Connection error', 'disconnected');
+                        this.connectBtn.disabled = false;
+                        this.disconnectBtn.disabled = true;
+                    };
+
+                } catch (error) {
+                    console.error('Failed to connect:', error);
+                    this.updateStatus('Failed to connect', 'disconnected');
+                }
+            }
+
+            disconnect() {
+                if (this.ws) {
+                    this.ws.close();
+                    this.ws = null;
+                }
+            }
+
+            handleMessage(data) {
+                try {
+                    const message = JSON.parse(data);
+                    this.messageCount++;
+                    this.confidenceSum += message.conf || 0;
+
+                    // Update current gaze display
+                    this.updateCurrentGaze(message);
+
+                    // Update gaze overlay position
+                    this.updateGazeOverlay(message);
+
+                    // Determine if this is a valid or invalid message
+                    const isValid = message.plane && message.plane.visible === true;
+                    if (isValid) {
+                        this.validCount++;
+                    } else {
+                        this.invalidCount++;
+                    }
+
+                    this.updateStats();
+
+                    // Display the message
+                    this.displayMessage(message, isValid);
+
+                } catch (error) {
+                    console.error('Failed to parse message:', error, data);
+                    this.displayMessage({ error: 'Failed to parse JSON', raw: data }, false);
+                }
+            }
+
+            updateCurrentGaze(message) {
+                if (!this.currentGazeDiv) return;
+
+                const sceneCoords = message.scene || {};
+                const planeCoords = message.plane || {};
+
+                document.getElementById('sceneCoords').textContent =
+                    `x: ${(sceneCoords.x || 0).toFixed(2)}, y: ${(sceneCoords.y || 0).toFixed(2)}`;
+
+                const screenX = planeCoords.x;
+                const screenY = planeCoords.y;
+                document.getElementById('screenCoords').textContent =
+                    screenX !== null && screenY !== null
+                        ? `x: ${screenX.toFixed(2)}, y: ${screenY.toFixed(2)}`
+                        : 'x: null, y: null';
+
+                document.getElementById('confidence').textContent = (message.conf || 0).toFixed(2);
+                document.getElementById('onSurface').textContent = planeCoords.on_surface || false;
+                document.getElementById('visible').textContent = planeCoords.visible || false;
+
+                this.currentGazeDiv.style.display = 'block';
+            }
+
+            updateGazeOverlay(message) {
+                if (!this.gazeOverlay || !this.showGazeOverlay) {
+                    this.gazeOverlay.style.display = 'none';
+                    return;
+                }
+
+                const planeCoords = message.plane || {};
+
+                if (planeCoords.x !== null && planeCoords.y !== null && planeCoords.visible) {
+                    // Convert from normalized coordinates to pixel coordinates
+                    const pixelX = planeCoords.x * markerConfig.screen_width;
+                    const pixelY = planeCoords.y * markerConfig.screen_height;
+
+                    this.gazeOverlay.style.left = pixelX + 'px';
+                    this.gazeOverlay.style.top = pixelY + 'px';
+                    this.gazeOverlay.style.display = 'block';
+                } else {
+                    this.gazeOverlay.style.display = 'none';
+                }
+            }
+
+            displayMessage(message, isValid) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message ${isValid ? 'valid' : 'invalid'}`;
+
+                const timestamp = new Date().toLocaleTimeString();
+                let content = `[${timestamp}] `;
+
+                if (this.prettyPrint) {
+                    content += JSON.stringify(message, null, 2);
+                } else {
+                    content += JSON.stringify(message);
+                }
+
+                messageDiv.textContent = content;
+                this.messagesDiv.appendChild(messageDiv);
+                this.messagesDiv.scrollTop = this.messagesDiv.scrollHeight;
+            }
+
+            updateStats() {
+                document.getElementById('messageCount').textContent = this.messageCount;
+                document.getElementById('validCount').textContent = this.validCount;
+                document.getElementById('invalidCount').textContent = this.invalidCount;
+
+                const avgConfidence = this.messageCount > 0 ? (this.confidenceSum / this.messageCount).toFixed(2) : '0.00';
+                document.getElementById('avgConfidence').textContent = avgConfidence;
+            }
+
+            updateStatus(text, className) {
+                this.statusDiv.textContent = text;
+                this.statusDiv.className = `status ${className}`;
+            }
+
+            clearMessages() {
+                this.messagesDiv.innerHTML = '';
+                this.messageCount = 0;
+                this.validCount = 0;
+                this.invalidCount = 0;
+                this.confidenceSum = 0;
+                this.updateStats();
+            }
+        }
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new MarkerLayoutTester();
+        });
+    </script>
+</body>
+</html>
