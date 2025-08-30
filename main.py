@@ -8,7 +8,7 @@ to connected WebSocket clients for interactive applications.
 
 Features:
 - Automatic device discovery and calibration
-- AprilTag-based surface configuration
+- AprilTag-based surface configuration with SurfaceLayout
 - Real-time gaze coordinate mapping
 - WebSocket streaming to clients
 - Graceful shutdown handling
@@ -31,7 +31,7 @@ import asyncio
 
 from device_manager import DeviceManager
 from websocket_server import start_websocket_server, send_gaze_data
-from surface import Surface
+from surface_layout import SurfaceLayout
 from pupil_labs.real_time_screen_gaze.gaze_mapper import GazeMapper
 
 # Global flag for graceful shutdown
@@ -49,20 +49,15 @@ signal.signal(signal.SIGINT, signal_handler)
 async def main(device, calibration):
     """Main async function that runs the gaze tracking with WebSocket server."""
 
-    # Load surface configuration using the Surface class
+    # Load surface configuration using SurfaceLayout
     print("Loading surface configuration...")
     try:
-        surface = Surface.from_file("apriltags/apriltag_config.yaml")
+        surface = SurfaceLayout.create_from_yaml("apriltags/apriltag_config.yaml")
         print(f"Loaded surface: {surface}")
 
-        # Validate configuration
-        validation_errors = surface.validate()
-        if validation_errors:
-            print("Configuration validation errors:")
-            for error in validation_errors:
-                print(f"  - {error}")
-            print("Please check your apriltags/apriltag_config.yaml file")
-            return
+        # Use tags directly as marker_vertices (already in correct format)
+        marker_vertices = surface.tags
+        surface_size = (surface.width, surface.height)
 
     except Exception as e:
         print(f"Failed to load surface configuration: {e}")
@@ -77,12 +72,12 @@ async def main(device, calibration):
         print(f"Failed to create GazeMapper: {e}")
         return
 
-    # Add surface to gaze mapper using calibration data
+    # Add surface to gaze mapper using converted data
     print("Adding surface to gaze mapper...")
     try:
         gaze_surface = gaze_mapper.add_surface(
-            surface.calibration.marker_vertices,
-            surface.calibration.surface_size
+            marker_vertices,
+            surface_size
         )
         print(f"Gaze surface created with UID: {gaze_surface.uid}")
     except Exception as e:
@@ -101,7 +96,7 @@ async def main(device, calibration):
     # Main loop
     print("Starting gaze tracking loop...")
     print("Press Ctrl+C to stop gracefully...")
-    print(f"Surface configuration: {surface.get_summary()}")
+    print(f"Surface configuration: {surface.width}x{surface.height}, {len(surface.tags)} tags")
 
     gaze_count = 0
     try:
@@ -120,8 +115,8 @@ async def main(device, calibration):
                         x, y = surface_gaze.x, surface_gaze.y
 
                         # Only send valid coordinates within surface bounds
-                        if (0 <= x <= surface.calibration.surface_size[0] and
-                            0 <= y <= surface.calibration.surface_size[1]):
+                        if (0 <= x <= surface_size[0] and
+                            0 <= y <= surface_size[1]):
                             print(f"Server sending: {x:.3f}, {y:.3f}")
                             await send_gaze_data(x, y)
                             gaze_count += 1

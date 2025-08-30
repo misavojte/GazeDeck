@@ -1,151 +1,93 @@
-screen_width: 1020
-screen_height: 780
-tag_size: 100
-rows: 3
-columns: 5
-margin: 10
-apriltags:
-  tag_0:
-    id: 0
-    description: Top-left corner
-    corners:
-    - - 10
-      - 10
-    - - 110
-      - 10
-    - - 110
-      - 110
-    - - 10
-      - 110
-  tag_1:
-    id: 1
-    description: Top edge, position 2
-    corners:
-    - - 235
-      - 10
-    - - 335
-      - 10
-    - - 335
-      - 110
-    - - 235
-      - 110
-  tag_2:
-    id: 2
-    description: Top edge, position 3
-    corners:
-    - - 460
-      - 10
-    - - 560
-      - 10
-    - - 560
-      - 110
-    - - 460
-      - 110
-  tag_3:
-    id: 3
-    description: Top edge, position 4
-    corners:
-    - - 685
-      - 10
-    - - 785
-      - 10
-    - - 785
-      - 110
-    - - 685
-      - 110
-  tag_4:
-    id: 4
-    description: Top-right corner
-    corners:
-    - - 910
-      - 10
-    - - 1010
-      - 10
-    - - 1010
-      - 110
-    - - 910
-      - 110
-  tag_5:
-    id: 5
-    description: Bottom-left corner
-    corners:
-    - - 10
-      - 670
-    - - 110
-      - 670
-    - - 110
-      - 770
-    - - 10
-      - 770
-  tag_6:
-    id: 6
-    description: Bottom edge, position 2
-    corners:
-    - - 235
-      - 670
-    - - 335
-      - 670
-    - - 335
-      - 770
-    - - 235
-      - 770
-  tag_7:
-    id: 7
-    description: Bottom edge, position 3
-    corners:
-    - - 460
-      - 670
-    - - 560
-      - 670
-    - - 560
-      - 770
-    - - 460
-      - 770
-  tag_8:
-    id: 8
-    description: Bottom edge, position 4
-    corners:
-    - - 685
-      - 670
-    - - 785
-      - 670
-    - - 785
-      - 770
-    - - 685
-      - 770
-  tag_9:
-    id: 9
-    description: Bottom-right corner
-    corners:
-    - - 910
-      - 670
-    - - 1010
-      - 670
-    - - 1010
-      - 770
-    - - 910
-      - 770
-  tag_10:
-    id: 10
-    description: Left edge, row 2
-    corners:
-    - - 10
-      - 340
-    - - 110
-      - 340
-    - - 110
-      - 440
-    - - 10
-      - 440
-  tag_14:
-    id: 14
-    description: Right edge, row 2
-    corners:
-    - - 910
-      - 340
-    - - 1010
-      - 340
-    - - 1010
-      - 440
-    - - 910
-      - 440
+surface_width: 1920
+surface_height: 1080
+tags:
+  '0':
+  - - 50
+    - 50
+  - - 150
+    - 50
+  - - 150
+    - 150
+  - - 50
+    - 150
+  '1':
+  - - 623
+    - 50
+  - - 723
+    - 50
+  - - 723
+    - 150
+  - - 623
+    - 150
+  '2':
+  - - 1196
+    - 50
+  - - 1296
+    - 50
+  - - 1296
+    - 150
+  - - 1196
+    - 150
+  '3':
+  - - 1770
+    - 50
+  - - 1870
+    - 50
+  - - 1870
+    - 150
+  - - 1770
+    - 150
+  '4':
+  - - 50
+    - 930
+  - - 150
+    - 930
+  - - 150
+    - 1030
+  - - 50
+    - 1030
+  '5':
+  - - 623
+    - 930
+  - - 723
+    - 930
+  - - 723
+    - 1030
+  - - 623
+    - 1030
+  '6':
+  - - 1196
+    - 930
+  - - 1296
+    - 930
+  - - 1296
+    - 1030
+  - - 1196
+    - 1030
+  '7':
+  - - 1770
+    - 930
+  - - 1870
+    - 930
+  - - 1870
+    - 1030
+  - - 1770
+    - 1030
+  '8':
+  - - 50
+    - 50
+  - - 150
+    - 50
+  - - 150
+    - 150
+  - - 50
+    - 150
+  '9':
+  - - 1770
+    - 50
+  - - 1870
+    - 50
+  - - 1870
+    - 150
+  - - 1770
+    - 150
