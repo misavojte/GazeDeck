@@ -1,31 +1,20 @@
 #!/usr/bin/env python3
 """
-AprilTags Configuration Generator
+Surface Configuration Generator
 
 Generates apriltags_config.yaml with tags placed around screen edges
 and automatically generates the corresponding AprilTag PNG images.
 Tags are distributed evenly along the perimeter of the screen.
 
-Usage:
-    python apriltags_config_generator.py [options]
-
-Options:
-    --screen-width WIDTH     Screen width in pixels (default: 1020)
-    --screen-height HEIGHT   Screen height in pixels (default: 780)
-    --tag-size SIZE         Size of each tag in pixels (default: 100)
-    --rows ROWS             Number of tag rows around edges (default: 2, minimum: 2)
-    --columns COLS          Number of tag columns around edges (default: 5, minimum: 2)
-    --margin MARGIN         Margin from screen edges in pixels (default: 10)
-    --output DIR            Output directory for config.yaml and PNG files (default: apriltags)
-
-Example:
-    python apriltags_config_generator.py --screen-width 1920 --screen-height 1080 --output my_tags
+This module provides functions to:
+- Generate AprilTag images using pupil_labs marker generator
+- Calculate optimal tag positions around screen edges
+- Generate and save configuration files
+- Validate generated configurations
 """
 
-import argparse
-import yaml
 import os
-import sys
+import yaml
 from pathlib import Path
 from typing import List, Tuple, Dict, Any
 import cv2
@@ -34,7 +23,16 @@ from pupil_labs.real_time_screen_gaze import marker_generator
 
 
 def save_apriltag(marker_id: int, output_path: str = "apriltags", size: int = 100) -> bool:
-    """Generate and save a single AprilTag as PNG using pupil_labs marker generator."""
+    """Generate and save a single AprilTag as PNG using pupil_labs marker generator.
+
+    Args:
+        marker_id: Unique identifier for the AprilTag
+        output_path: Directory path to save the PNG file
+        size: Size of the generated image in pixels
+
+    Returns:
+        bool: True if successful, False otherwise
+    """
     try:
         # Generate the marker using pupil_labs (this creates valid AprilTags)
         marker_pixels = marker_generator.generate_marker(marker_id=marker_id)
@@ -73,10 +71,10 @@ def save_apriltag(marker_id: int, output_path: str = "apriltags", size: int = 10
         return False
 
 
-def calculate_edge_positions(screen_width: int, screen_height: int, tag_size: int,
+def calculate_edge_positions(surface_width: int, surface_height: int, tag_size: int,
                            rows: int, columns: int, margin: int) -> Dict[int, List[Tuple[int, int]]]:
     """
-    Calculate AprilTag positions around screen edges.
+    Calculate AprilTag positions around surface edges.
 
     For a 2x5 layout:
     - Top edge: 5 tags distributed evenly
@@ -91,12 +89,12 @@ def calculate_edge_positions(screen_width: int, screen_height: int, tag_size: in
     Inner positions (non-edge) are left empty.
 
     Args:
-        screen_width: Screen width in pixels
-        screen_height: Screen height in pixels
+        surface_width: Surface width in pixels
+        surface_height: Surface height in pixels
         tag_size: Size of each tag in pixels
         rows: Number of rows (minimum 2 for top/bottom edges)
         columns: Number of columns (minimum 2, tags per edge)
-        margin: Margin from screen edges
+        margin: Margin from surface edges
 
     Returns:
         Dictionary mapping tag IDs to corner coordinates (only edge positions)
@@ -109,7 +107,7 @@ def calculate_edge_positions(screen_width: int, screen_height: int, tag_size: in
     positions = {}
 
     # Calculate spacing for top and bottom edges
-    available_width = screen_width - 2 * margin
+    available_width = surface_width - 2 * margin
     if columns > 1:
         spacing_x = (available_width - tag_size) / (columns - 1)
     else:
@@ -133,7 +131,7 @@ def calculate_edge_positions(screen_width: int, screen_height: int, tag_size: in
         tag_id += 1
 
     # Bottom edge tags (distributed across columns)
-    y_top = screen_height - margin - tag_size
+    y_top = surface_height - margin - tag_size
     for col in range(columns):
         x_left = margin + col * spacing_x
         x_right = x_left + tag_size
@@ -150,7 +148,7 @@ def calculate_edge_positions(screen_width: int, screen_height: int, tag_size: in
     # For rows > 2, only add edge tags (left and right edges)
     if rows > 2:
         # Calculate vertical spacing for left and right edges
-        available_height = screen_height - 2 * margin
+        available_height = surface_height - 2 * margin
         if rows > 3:
             spacing_y = (available_height - tag_size) / (rows - 3)
         else:
@@ -161,14 +159,14 @@ def calculate_edge_positions(screen_width: int, screen_height: int, tag_size: in
         x_right = x_left + tag_size
 
         # Right edge tags
-        x_left_right = screen_width - margin - tag_size
+        x_left_right = surface_width - margin - tag_size
         x_right_right = x_left_right + tag_size
 
         for row in range(2, rows):
             # Calculate Y position for this row
             if rows == 3:
                 # For 3 rows total, place middle row in center
-                y_top = (screen_height - tag_size) // 2
+                y_top = (surface_height - tag_size) // 2
             else:
                 # For more rows, distribute evenly between top and bottom
                 y_top = margin + (row - 1) * spacing_y
@@ -197,7 +195,17 @@ def calculate_edge_positions(screen_width: int, screen_height: int, tag_size: in
 
 
 def get_edge_description(row: int, col: int, columns: int, rows: int) -> str:
-    """Get description for edge-placed tag."""
+    """Get description for edge-placed tag.
+
+    Args:
+        row: Row index of the tag
+        col: Column index of the tag
+        columns: Total number of columns
+        rows: Total number of rows
+
+    Returns:
+        str: Human-readable description of the tag's position
+    """
     if row == 0:  # Top edge
         if col == 0:
             return "Top-left corner"
@@ -219,31 +227,31 @@ def get_edge_description(row: int, col: int, columns: int, rows: int) -> str:
             return f"Right edge, row {row}"
 
 
-def generate_config(screen_width: int, screen_height: int, tag_size: int,
+def generate_config(surface_width: int, surface_height: int, tag_size: int,
                    rows: int, columns: int, margin: int) -> Dict[str, Any]:
     """
     Generate complete configuration dictionary.
 
     Args:
-        screen_width: Screen width in pixels
-        screen_height: Screen height in pixels
+        surface_width: Surface width in pixels
+        surface_height: Surface height in pixels
         tag_size: Size of each tag in pixels
         rows: Number of rows around edges
         columns: Number of columns around edges
-        margin: Margin from screen edges
+        margin: Margin from surface edges
 
     Returns:
         Complete configuration dictionary
     """
     # Calculate tag positions
     marker_positions = calculate_edge_positions(
-        screen_width, screen_height, tag_size, rows, columns, margin
+        surface_width, surface_height, tag_size, rows, columns, margin
     )
 
     # Build configuration
     config = {
-        'screen_width': screen_width,
-        'screen_height': screen_height,
+        'surface_width': surface_width,
+        'surface_height': surface_height,
         'tag_size': tag_size,
         'rows': rows,
         'columns': columns,
@@ -261,8 +269,6 @@ def generate_config(screen_width: int, screen_height: int, tag_size: int,
             'description': get_edge_description(row, col, columns, rows),
             'corners': [list(corner) for corner in corners]  # Convert tuples to lists
         }
-
-
 
     return config
 
@@ -288,20 +294,27 @@ def save_config(config: Dict[str, Any], output_path: str) -> None:
 
 
 def validate_config(config: Dict[str, Any]) -> List[str]:
-    """Validate the generated configuration."""
+    """Validate the generated configuration.
+
+    Args:
+        config: Configuration dictionary to validate
+
+    Returns:
+        List of validation error messages (empty if valid)
+    """
     errors = []
 
     # Check required fields
-    required_fields = ['screen_width', 'screen_height', 'apriltags']
+    required_fields = ['surface_width', 'surface_height', 'apriltags']
     for field in required_fields:
         if field not in config:
             errors.append(f"Missing required field: {field}")
 
-    # Check screen dimensions
-    if 'screen_width' in config and config['screen_width'] <= 0:
-        errors.append("screen_width must be positive")
-    if 'screen_height' in config and config['screen_height'] <= 0:
-        errors.append("screen_height must be positive")
+    # Check surface dimensions
+    if 'surface_width' in config and config['surface_width'] <= 0:
+        errors.append("surface_width must be positive")
+    if 'surface_height' in config and config['surface_height'] <= 0:
+        errors.append("surface_height must be positive")
 
     # Check tags
     if 'apriltags' in config:
@@ -327,96 +340,3 @@ def validate_config(config: Dict[str, Any]) -> List[str]:
                         errors.append(f"Tag '{tag_name}' must have exactly 4 corners, got {len(corners)}")
 
     return errors
-
-
-def main():
-    """Main function to generate AprilTags configuration."""
-    parser = argparse.ArgumentParser(
-        description="Generate AprilTags configuration with edge placement",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=__doc__
-    )
-
-    parser.add_argument('--screen-width', type=int, default=1020,
-                       help='Screen width in pixels (default: 1020)')
-    parser.add_argument('--screen-height', type=int, default=780,
-                       help='Screen height in pixels (default: 780)')
-    parser.add_argument('--tag-size', type=int, default=100,
-                       help='Size of each tag in pixels (default: 100)')
-    parser.add_argument('--rows', type=int, default=2,
-                       help='Number of tag rows around edges (default: 2)')
-    parser.add_argument('--columns', type=int, default=5,
-                       help='Number of tag columns around edges (default: 5)')
-    parser.add_argument('--margin', type=int, default=10,
-                       help='Margin from screen edges in pixels (default: 10)')
-    parser.add_argument('--output', type=str, default='apriltags',
-                       help='Output directory for config.yaml and PNG files (default: apriltags)')
-
-    args = parser.parse_args()
-
-    try:
-        # Generate configuration
-        print("Generating AprilTags configuration...")
-        print(f"Screen: {args.screen_width}x{args.screen_height}")
-        print(f"Tags: {args.rows}x{args.columns} around edges")
-        print(f"Tag size: {args.tag_size}x{args.tag_size}")
-        print(f"Margin: {args.margin}px")
-        print()
-
-        config = generate_config(
-            screen_width=args.screen_width,
-            screen_height=args.screen_height,
-            tag_size=args.tag_size,
-            rows=args.rows,
-            columns=args.columns,
-            margin=args.margin
-        )
-
-        # Validate configuration
-        errors = validate_config(config)
-        if errors:
-            print("Configuration validation errors:")
-            for error in errors:
-                print(f"  - {error}")
-            return 1
-
-        # Determine output directory and config file path
-        output_dir = Path(args.output)
-        config_file_path = output_dir / 'apriltag_config.yaml'
-        png_output_dir = str(output_dir)
-
-        # Save configuration
-        save_config(config, str(config_file_path))
-
-        # Generate PNG files for each tag
-        print(f"\nGenerating AprilTag PNG files to: {png_output_dir}")
-        png_success_count = 0
-        total_tags = len(config['apriltags'])
-
-        for tag_name, tag_data in config['apriltags'].items():
-            tag_id = tag_data['id']
-            if save_apriltag(tag_id, png_output_dir, args.tag_size):
-                png_success_count += 1
-
-        # Show summary
-        print("\nConfiguration and PNG generation completed!")
-        print(f"Total tags: {total_tags}")
-        print(f"Layout: {args.rows}x{args.columns} grid (only edge positions filled)")
-        print(f"Output directory: {args.output}")
-        print(f"Files created: apriltag_config.yaml + {png_success_count} PNG files")
-
-        if png_success_count != total_tags:
-            print(f"Warning: {total_tags - png_success_count} PNG files failed to generate")
-            return 1
-
-        return 0
-
-    except Exception as e:
-        print(f"Error generating configuration: {e}")
-        import traceback
-        traceback.print_exc()
-        return 1
-
-
-if __name__ == "__main__":
-    exit(main())
