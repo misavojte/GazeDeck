@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass
 from typing import Awaitable, Callable, Dict, Optional
 from pupil_labs.realtime_api.device import Device, Calibration
@@ -15,10 +14,13 @@ class LabeledDevice:
 
     Notes:
         - Other methods and properties are available on the Device instance (see Pupil Labs Realtime ASYNC API documentation).
+        - Device name and IP are cached from device status for easy access.
     """
     label: str
     device: Device
     camera_calibration: Calibration # not an eye-tracking calibration! this is used to correct the distortion of the FPV camera
+    name: str  # Device name from phone.device_name
+    ip: str    # Device IP address from phone.ip
 
 
 async def label_devices(
@@ -27,6 +29,8 @@ async def label_devices(
 ) -> Dict[int, LabeledDevice]:
     """
     Ask the UI layer for labels per device; return only those that were labeled.
+
+    For CLI, gazedeck/cli/prompt_device_labeling.py contains the implementation of ask_label.
 
     Args:
         devices: {index -> Device} from discovery.
@@ -41,13 +45,27 @@ async def label_devices(
         raw = await ask_label(idx, dev)
         label = (raw or "").strip()
         if label:  # skip if user left it blank / None
-            labeled[idx] = LabeledDevice(label=label, device=dev)
+            # get device status for name and IP
+            status = await dev.get_status()
+            device_name = status.phone.device_name or f"Device_{idx}"
+            device_ip = status.phone.ip or "unknown"
+
             # get the calibration of the camera (THIS IS AVAILABLE ONLY FOR NEON DEVICES)
             # this is not the eye tracking calibration! this is used to correct the distortion of the FPV camera
             camera_calibration = await dev.get_calibration()
             # if not available, raise an error immediately
             if camera_calibration is None:
                 raise ValueError("Camera calibration is not available for this device. Please check if the device is a Neon device.")
-            labeled[idx].camera_calibration = camera_calibration
+
+            labeled[idx] = LabeledDevice(
+                label=label,
+                device=dev,
+                camera_calibration=camera_calibration,
+                name=device_name,
+                ip=device_ip
+            )
+        else:
+            # close the device
+            await dev.close()
 
     return labeled

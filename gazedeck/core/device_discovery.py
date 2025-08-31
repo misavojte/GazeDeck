@@ -17,6 +17,7 @@ async def discover_devices_indexed(duration: float = 3.0) -> Dict[int, Device]:
         - Caller is responsible for closing devices (e.g., `await dev.close()` or `async with dev:`).
     """
     async with Network() as network:
+        print(f"Scanning for {duration} seconds...")
         await asyncio.sleep(duration)
         return {
             i: Device.from_discovered_device(info)
