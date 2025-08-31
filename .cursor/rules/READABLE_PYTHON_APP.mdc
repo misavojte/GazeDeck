@@ -1,0 +1,14 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+
+We are creating a **modular Python project** that is readable even for people who are not familiar with Python.  
+The code must be **self-documenting** with clear docstrings that explain **why** each design decision is made.  
+This includes explaining:
+- quirks of each library used
+- good practices of Python apps
+- reasons for architectural decisions
+
+The project must be **easily extendable**.
