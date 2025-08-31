@@ -1,0 +1,1 @@
+# gazedeck/core/surface_layout_discovery.py

@@ -1,0 +1,12 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+
+You are not allowed to create random test files. If you need to test something, create a permanent unit
+test file in the tests/ directory.
+
+The test files should be named like this: test_<feature_name>.py
+
+You should use the unittest library to create the test files.

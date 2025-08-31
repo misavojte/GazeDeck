@@ -1,4 +1,5 @@
-# mypy: ignore-errors
+# gazedeck/core/websocket_server.py
+
 """
 Tiny high-throughput WebSocket broadcast server.
 
