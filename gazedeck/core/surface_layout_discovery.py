@@ -1,11 +1,14 @@
 # gazedeck/core/surface_layout_discovery.py
 
+# python
 from dataclasses import dataclass
 from typing import Dict, Tuple
+
+# external
 import yaml
 import os
 
-@dataclass
+@dataclass(frozen=True)
 class SurfaceLayout:
     id: str
     tags: Dict[int, Tuple[Tuple[float, float], Tuple[float, float], Tuple[float, float], Tuple[float, float]]]  # Each tag has four corner coordinates

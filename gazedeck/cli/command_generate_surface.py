@@ -1,8 +1,12 @@
 # gazedeck/cli/command_generate_surface.py
 
+# python
 from __future__ import annotations
 
+# external
 import argparse
+
+# internal
 from gazedeck.core.surface_layout_generation import generate_surface_layout_from_rows_and_columns, save_surface_layout
 
 

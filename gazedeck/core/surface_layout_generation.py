@@ -1,8 +1,13 @@
 # gazedeck/core/surface_layout_generation.py
 
+# python
 import cv2
 import os
+
+# internal
 from gazedeck.core.surface_layout_discovery import SurfaceLayout
+
+# external
 from typing import Dict, Tuple
 import yaml
 

@@ -1,15 +1,16 @@
 # gazedeck/core/surface_layout_labeling.py
 
+# python
 from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import Awaitable, Callable, Dict, Optional
+
+# internal
 from gazedeck.core.surface_layout_discovery import SurfaceLayout
 
-@dataclass
+@dataclass(frozen=True)
 class SurfaceLayoutLabeled(SurfaceLayout):
     label: str
-
 
 async def label_surface_layouts(
     layouts: Dict[int, SurfaceLayout],

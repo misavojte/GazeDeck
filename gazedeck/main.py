@@ -14,6 +14,10 @@ from gazedeck.cli.command_test_surface_layout_discovery import (
     add_test_surface_layout_discovery_parser,
     execute_test_surface_layout_discovery
 )
+from gazedeck.cli.command_stream import (
+    add_stream_parser,
+    execute_stream
+)
 
 
 def main() -> None:
@@ -23,6 +27,7 @@ def main() -> None:
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     # Add command parsers
+    add_stream_parser(subparsers)
     add_test_device_discovery_parser(subparsers)
     add_generate_surface_parser(subparsers)
     add_test_surface_layout_discovery_parser(subparsers)
@@ -31,6 +36,8 @@ def main() -> None:
 
     if args.command == "test-device-discovery":
         asyncio.run(execute_test_device_discovery(args))
+    elif args.command == "stream":
+        asyncio.run(execute_stream(args))
     elif args.command == "generate-surface":
         execute_generate_surface(args)
     elif args.command == "test-surface-layout-discovery":

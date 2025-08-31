@@ -1,19 +1,22 @@
 # gazedeck/core/streaming_gaze_mapping.py
 
+# pupil labs realtime api
 from pupil_labs.neon_recording.calib import Calibration
-from pupil_labs.realtime_api import (  # noqa: E402
-    Device,
+from pupil_labs.realtime_api.streaming import GazeData
+from pupil_labs.realtime_api import (  
     VideoFrame,
     receive_gaze_data,
     receive_video_frames,
 )
+
+# python
 import asyncio
 from typing import Dict, List, TypeVar, Tuple, Optional
 from asyncio import QueueEmpty, QueueFull, AsyncIterator
 from datetime import datetime
 from dataclasses import dataclass
 
-from pupil_labs.realtime_api.streaming import GazeData
+# internal
 from gazedeck.core.device_labeling import LabeledDevice
 from gazedeck.core.gaze_mapper import GazeMapper, MarkerMappedGaze
 from gazedeck.core.surface_layout_labeling import SurfaceLayoutLabeled
