@@ -8,10 +8,10 @@ from gazedeck.core.device_labeling import LabeledDevice, label_devices
 from gazedeck.cli.prompt_device_labeling import ask_label_cli
 
 
-async def run_cli_discovery_and_label(duration: float = 3.0) -> Dict[int, LabeledDevice]:
+async def setup_labeled_devices_cli(duration: float = 3.0) -> Dict[int, LabeledDevice]:
     """
     Discover devices for `duration` seconds, prompt labels (blank=skip),
-    and store labeled devices into global process state.
+    and return labeled devices.
     """
     devices: Dict[int, Device] = await discover_devices_indexed(duration)
 
@@ -26,6 +26,6 @@ async def run_cli_discovery_and_label(duration: float = 3.0) -> Dict[int, Labele
         for idx, ld in labeled.items():
             print(f"  [{idx}] {ld.label} -> {ld.name} ({ld.ip})")
     else:
-        print("No devices labeled (nothing stored).")
+        print("No devices labeled.")
 
     return labeled

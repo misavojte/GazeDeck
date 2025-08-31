@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-from gazedeck.cli.setup_device_labeling import run_cli_discovery_and_label
+from gazedeck.cli.setup_labeled_devices import setup_labeled_devices_cli
 from gazedeck.core import state
 
 async def run_discovery_and_label(duration: float = 3.0):
-    labeled_devices = await run_cli_discovery_and_label(duration)
-    state.LABELED_DEVICES = labeled_devices
+    labeled_devices = await setup_labeled_devices_cli(duration)
+    state.LABELED_DEVICES.update(labeled_devices)
 
 async def cleanup_devices():
     for device in state.LABELED_DEVICES.values():
@@ -32,7 +32,7 @@ def main() -> None:
 
     if args.test_discovery:
         asyncio.run(run_discovery_and_label(args.duration))
-        if state.LABELED_DEVICES:
+        if len(state.LABELED_DEVICES) > 0:
             print(f"Stored {len(state.LABELED_DEVICES)} labeled device(s) in memory.")
         else:
             print("No labeled devices stored.")
