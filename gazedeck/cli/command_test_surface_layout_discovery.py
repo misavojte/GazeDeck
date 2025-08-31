@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import argparse
-import asyncio
 from typing import Dict
 
 from gazedeck.cli.setup_labeled_surface_layouts import setup_labeled_surface_layouts_cli
-from gazedeck.core import state
 from gazedeck.core.surface_layout_labeling import SurfaceLayoutLabeled
 
 
@@ -45,21 +43,15 @@ async def run_discovery_and_label(directory: str = ".") -> Dict[int, SurfaceLayo
         Dictionary of labeled surface layouts indexed by their discovery order
     """
     labeled_layouts = await setup_labeled_surface_layouts_cli(directory)
-    # Note: state module would need to be extended to store labeled surface layouts
-    # state.LABELED_SURFACE_LAYOUTS.update(labeled_layouts)
     return labeled_layouts
 
 
-async def cleanup_surface_layouts():
+async def cleanup_surface_layouts(layouts: Dict[int, SurfaceLayoutLabeled]):
     """
     Clean up all stored labeled surface layouts.
     """
-    # Note: state module would need to be extended to store labeled surface layouts
-    # for layout in state.LABELED_SURFACE_LAYOUTS.values():
-    #     # Any cleanup needed for surface layouts
-    #     pass
-    # state.LABELED_SURFACE_LAYOUTS.clear()
-    pass
+    layouts.clear()
+
 
 
 async def execute_test_surface_layout_discovery(args: argparse.Namespace):
@@ -77,4 +69,4 @@ async def execute_test_surface_layout_discovery(args: argparse.Namespace):
         print("No labeled surface layouts found.")
 
     print("Finishing the test. Cleaning up...")
-    await cleanup_surface_layouts()
+    await cleanup_surface_layouts(labeled_layouts)

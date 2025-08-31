@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import argparse
-import asyncio
 from typing import Dict
 
 from gazedeck.cli.setup_labeled_devices import setup_labeled_devices_cli
-from gazedeck.core import state
 from gazedeck.core.device_labeling import LabeledDevice
 
 
@@ -45,17 +43,16 @@ async def run_discovery_and_label(duration: float = 3.0) -> Dict[int, LabeledDev
         Dictionary of labeled devices indexed by their discovery order
     """
     labeled_devices = await setup_labeled_devices_cli(duration)
-    state.LABELED_DEVICES.update(labeled_devices)
     return labeled_devices
 
 
-async def cleanup_devices():
+async def cleanup_devices(devices: Dict[int, LabeledDevice]):
     """
     Clean up all stored labeled devices by closing their connections.
     """
-    for device in state.LABELED_DEVICES.values():
+    for device in devices.values():
         await device.device.close()
-    state.LABELED_DEVICES.clear()
+    devices.clear()
 
 
 async def execute_test_device_discovery(args: argparse.Namespace):
@@ -73,4 +70,4 @@ async def execute_test_device_discovery(args: argparse.Namespace):
         print("No labeled devices stored.")
 
     print("Finishing the test. Cleaning up devices...")
-    await cleanup_devices()
+    await cleanup_devices(labeled_devices)
