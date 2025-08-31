@@ -28,43 +28,50 @@ def add_generate_surface_parser(subparsers) -> argparse.ArgumentParser:
     generate_parser.add_argument(
         "--rows",
         type=int,
-        required=True,
+        default=3,
+        required=False,
         help="Number of rows of tags (minimum 2)",
     )
     generate_parser.add_argument(
         "--columns",
         type=int,
-        required=True,
+        default=5,
+        required=False,
         help="Number of columns of tags (minimum 2)",
     )
     generate_parser.add_argument(
         "--surface-width",
         type=float,
-        required=True,
+        default=1920.0,
+        required=False,
         help="Width of the surface in your chosen units",
     )
     generate_parser.add_argument(
         "--surface-height",
         type=float,
-        required=True,
+        default=1080.0,
+        required=False,
         help="Height of the surface in your chosen units",
     )
     generate_parser.add_argument(
         "--tag-size",
         type=float,
-        required=True,
+        default=100.0,
+        required=False,
         help="Size of each AprilTag in the same units as surface dimensions",
     )
     generate_parser.add_argument(
         "--margin",
         type=float,
-        default=0.0,
+        default=25.0,
+        required=False,
         help="Margin from surface edge to first tag (default: 0.0). Can be negative.",
     )
     generate_parser.add_argument(
         "--starting-tag-id",
         type=int,
         default=0,
+        required=False,
         help="Starting ID for the AprilTags (default: 0)",
     )
     generate_parser.add_argument(
