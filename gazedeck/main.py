@@ -10,6 +10,10 @@ from gazedeck.cli.command_generate_surface import (
     add_generate_surface_parser,
     execute_generate_surface
 )
+from gazedeck.cli.command_test_surface_layout_discovery import (
+    add_test_surface_layout_discovery_parser,
+    execute_test_surface_layout_discovery
+)
 
 
 def main() -> None:
@@ -21,6 +25,7 @@ def main() -> None:
     # Add command parsers
     add_test_device_discovery_parser(subparsers)
     add_generate_surface_parser(subparsers)
+    add_test_surface_layout_discovery_parser(subparsers)
 
     args = parser.parse_args()
 
@@ -28,6 +33,8 @@ def main() -> None:
         asyncio.run(execute_test_device_discovery(args))
     elif args.command == "generate-surface":
         execute_generate_surface(args)
+    elif args.command == "test-surface-layout-discovery":
+        asyncio.run(execute_test_surface_layout_discovery(args))
     else:
         parser.print_help()
 
