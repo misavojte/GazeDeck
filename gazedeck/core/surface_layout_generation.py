@@ -14,7 +14,7 @@ import yaml
 # we are using AprilTag 36h11
 apriltag_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h11)
 
-def generate_marker(marker_id, side_pixels=8, flip_x=False, flip_y=False):
+def generate_marker(marker_id, side_pixels=100, flip_x=False, flip_y=False):
 	image_data = apriltag_dict.generateImageMarker(marker_id, side_pixels, 0)
 
 	flip_code = None

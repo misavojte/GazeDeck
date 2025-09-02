@@ -142,7 +142,7 @@ async def match_and_map_gaze(queue_video: asyncio.Queue[VideoFrame], queue_gaze:
                     surface_gaze[surface_label] = GazeMappedSurfaceResult(
                         x=mapped_data.x,
                         y=mapped_data.y,
-                        is_on_surface=mapped_data.is_on_surface
+                        is_on_surface=mapped_data.is_on_aoi
                     )
                 else:
                     surface_gaze[surface_label] = None

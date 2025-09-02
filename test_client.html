@@ -7,16 +7,17 @@
     <style>
         body {
             font-family: Arial, sans-serif;
-            margin: 20px;
+            margin: 0;
+            padding: 0;
             background: #f0f0f0;
+            overflow-x: auto;
         }
         .container {
-            max-width: 1200px;
-            margin: 0 auto;
+            width: 100%;
+            margin: 0;
             background: white;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 10px;
+            min-height: 100vh;
         }
         .status {
             padding: 10px;
@@ -35,8 +36,8 @@
             border: 1px solid #f5c6cb;
         }
         .screen {
-            width: 1020px;
-            height: 780px;
+            width: 1920px;
+            height: 1080px;
             background: linear-gradient(45deg, #f8f9fa 25%, transparent 25%),
                         linear-gradient(-45deg, #f8f9fa 25%, transparent 25%),
                         linear-gradient(45deg, transparent 75%, #f8f9fa 75%),
@@ -45,9 +46,10 @@
             background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
             border: 2px solid #333;
             position: relative;
-            margin: 20px auto;
+            margin: 10px auto;
             overflow: hidden;
             box-sizing: border-box;
+            display: block;
         }
         .apriltag {
             position: absolute;
@@ -78,11 +80,22 @@
             background: #f8f9fa;
             padding: 10px;
             border-radius: 5px;
-            margin: 10px 0;
+            margin: 10px auto;
             font-size: 14px;
+            text-align: center;
+            max-width: 600px;
+        }
+        .header {
+            text-align: center;
+            margin: 10px 0;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 5px;
         }
         .controls {
-            margin: 20px 0;
+            text-align: center;
+            margin: 10px 0;
+            padding: 10px;
         }
         button {
             padding: 8px 16px;
@@ -109,10 +122,11 @@
 </head>
 <body>
     <div class="container">
-        <h1>GazeDeck WebSocket Test Client</h1>
-
-        <div id="status" class="status disconnected">
-            Connecting to ws://localhost:8765...
+        <div class="header">
+            <h1>GazeDeck WebSocket Test Client</h1>
+            <div id="status" class="status disconnected">
+                Connecting to ws://localhost:8765...
+            </div>
         </div>
 
         <div class="controls">
@@ -129,35 +143,34 @@
         </div>
 
         <div class="screen" id="screen">
-            <!-- AprilTag markers positioned EXACTLY according to main.py marker_verts coordinates -->
+            <!-- AprilTag markers positioned EXACTLY according to surface_layout.yaml coordinates -->
             <!-- Each marker is 100x100px positioned at top-left corner coordinates -->
-            <img src="apriltags/apriltag_0.png" class="apriltag" style="left: 65px; top: 90px;" alt="AprilTag 0 (65,90)">
-            <img src="apriltags/apriltag_1.png" class="apriltag" style="left: 295px; top: 90px;" alt="AprilTag 1 (295,90)">
-            <img src="apriltags/apriltag_2.png" class="apriltag" style="left: 525px; top: 90px;" alt="AprilTag 2 (525,90)">
-            <img src="apriltags/apriltag_3.png" class="apriltag" style="left: 755px; top: 90px;" alt="AprilTag 3 (755,90)">
-            <img src="apriltags/apriltag_4.png" class="apriltag" style="left: 985px; top: 90px;" alt="AprilTag 4 (985,90)">
+            <img src="output/surface1/tag_0.png" class="apriltag" style="left: 25px; top: 25px;" alt="AprilTag 0 (25,25)">
+            <img src="output/surface1/tag_1.png" class="apriltag" style="left: 467.5px; top: 25px;" alt="AprilTag 1 (467.5,25)">
+            <img src="output/surface1/tag_2.png" class="apriltag" style="left: 910px; top: 25px;" alt="AprilTag 2 (910,25)">
+            <img src="output/surface1/tag_3.png" class="apriltag" style="left: 1352.5px; top: 25px;" alt="AprilTag 3 (1352.5,25)">
+            <img src="output/surface1/tag_4.png" class="apriltag" style="left: 1795px; top: 25px;" alt="AprilTag 4 (1795,25)">
 
-            <img src="apriltags/apriltag_5.png" class="apriltag" style="left: 65px; top: 590px;" alt="AprilTag 5 (65,590)">
-            <img src="apriltags/apriltag_6.png" class="apriltag" style="left: 295px; top: 590px;" alt="AprilTag 6 (295,590)">
-            <img src="apriltags/apriltag_7.png" class="apriltag" style="left: 525px; top: 590px;" alt="AprilTag 7 (525,590)">
-            <img src="apriltags/apriltag_8.png" class="apriltag" style="left: 755px; top: 590px;" alt="AprilTag 8 (755,590)">
-            <img src="apriltags/apriltag_9.png" class="apriltag" style="left: 985px; top: 590px;" alt="AprilTag 9 (985,590)">
+            <img src="output/surface1/tag_5.png" class="apriltag" style="left: 25px; top: 490px;" alt="AprilTag 5 (25,490)">
+            <img src="output/surface1/tag_6.png" class="apriltag" style="left: 1795px; top: 490px;" alt="AprilTag 6 (1795,490)">
+            <img src="output/surface1/tag_7.png" class="apriltag" style="left: 25px; top: 955px;" alt="AprilTag 7 (25,955)">
+            <img src="output/surface1/tag_8.png" class="apriltag" style="left: 467.5px; top: 955px;" alt="AprilTag 8 (467.5,955)">
+            <img src="output/surface1/tag_9.png" class="apriltag" style="left: 910px; top: 955px;" alt="AprilTag 9 (910,955)">
+            <img src="output/surface1/tag_10.png" class="apriltag" style="left: 1352.5px; top: 955px;" alt="AprilTag 10 (1352.5,955)">
+            <img src="output/surface1/tag_11.png" class="apriltag" style="left: 1795px; top: 955px;" alt="AprilTag 11 (1795,955)">
 
             <div class="dot" id="gazeDot"></div>
         </div>
 
-        <div class="info">
-            <p><strong>Instructions:</strong></p>
-            <ul>
-                <li>The dot represents your gaze position on a <strong>1020x780 screen</strong></li>
-                <li><strong>10 AprilTags</strong> positioned EXACTLY at main.py marker_verts coordinates</li>
-                <li>Each AprilTag is <strong>100x100px</strong> with red border for visibility</li>
-                <li>Green = Connected, Red = Disconnected</li>
-                <li><strong>FIXED: Y-axis inverted</strong> - pupil labs uses inverted Y coordinates</li>
-                <li><strong>DEBUG: Check console</strong> for raw coordinate values</li>
-                <li>AprilTag positions: Row1(90px): 65,295,525,755,985px | Row2(590px): 65,295,525,755,985px</li>
-                <li>Test by looking at different AprilTag positions</li>
-            </ul>
+        <div class="info" style="text-align: center; margin-top: 20px; font-size: 11px; color: #888;">
+            <div style="display: inline-block; text-align: left; max-width: 800px;">
+                <strong>Quick Guide:</strong>
+                • Red dot shows gaze position on 1920×1080 screen
+                • 12 AprilTags positioned exactly at surface_layout.yaml coordinates
+                • Green = Connected, Red = Disconnected
+                • Y-axis inverted (Pupil Labs coordinate system)
+                • Check browser console for debug info
+            </div>
         </div>
     </div>
 
@@ -177,8 +190,8 @@
                 this.screenSize = document.getElementById('screenSize');
 
                 // Smoothing variables
-                this.currentX = 510;  // Center of 1020px width
-                this.currentY = 390;  // Center of 780px height
+                this.currentX = 960;  // Center of 1920px width
+                this.currentY = 540;  // Center of 1080px height
                 this.smoothing = 0.3; // Lower = smoother but more lag
 
                 this.bindEvents();
@@ -200,6 +213,7 @@
                 this.updateStatus('Connecting...', 'disconnected');
 
                 this.ws.onopen = () => {
+                    console.log('WebSocket connection opened');
                     this.updateStatus('Connected to GazeDeck WebSocket server', 'connected');
                     this.connectBtn.disabled = true;
                     this.disconnectBtn.disabled = false;
@@ -207,22 +221,33 @@
                 };
 
                 this.ws.onmessage = (event) => {
+                    console.log('WebSocket message received - Raw data:', event.data);
+
                     try {
                         const data = JSON.parse(event.data);
-                        console.log('Received:', data); // Debug logging
+                        console.log('Parsed WebSocket message:', data);
 
                         if (data.type === 'connection_established') {
-                            console.log('Connection confirmed:', data.message);
+                            console.log('Connection established message:', data.message);
                             this.updateStatus('Connected and confirmed by server', 'connected');
                         } else if (data.type === 'gaze_data') {
+                            console.log('Gaze data received:', { x: data.x, y: data.y });
                             this.updateGazePosition(data.x, data.y);
+                        } else {
+                            console.log('Unknown message type received:', data.type);
                         }
                     } catch (e) {
-                        console.error('Failed to parse message:', e);
+                        console.error('Failed to parse WebSocket message:', e);
+                        console.error('Raw message that failed to parse:', event.data);
                     }
                 };
 
-                this.ws.onclose = () => {
+                this.ws.onclose = (event) => {
+                    console.log('WebSocket connection closed:', {
+                        code: event.code,
+                        reason: event.reason,
+                        wasClean: event.wasClean
+                    });
                     this.updateStatus('Disconnected from WebSocket server', 'disconnected');
                     this.connectBtn.disabled = false;
                     this.disconnectBtn.disabled = true;
@@ -230,8 +255,8 @@
                 };
 
                 this.ws.onerror = (error) => {
+                    console.error('WebSocket error occurred:', error);
                     this.updateStatus('WebSocket error occurred', 'disconnected');
-                    console.error('WebSocket error:', error);
                 };
             }
 
@@ -243,9 +268,9 @@
 
             updateGazePosition(x, y) {
                 // Pupil Labs sends normalized coordinates (0-1 range)
-                // Convert to absolute screen coordinates (1020x780)
-                const screenWidth = 1020;
-                const screenHeight = 780;
+                // Convert to absolute screen coordinates (1920x1080)
+                const screenWidth = 1920;
+                const screenHeight = 1080;
 
                 // DEBUG: Log raw coordinates
                 console.log(`Raw gaze data - X: ${x.toFixed(3)}, Y: ${y.toFixed(3)}`);
@@ -289,10 +314,10 @@
 
             clearPath() {
                 // Reset to center position
-                this.currentX = 510;
-                this.currentY = 390;
-                this.dot.style.left = '510px';
-                this.dot.style.top = '390px';
+                this.currentX = 960;
+                this.currentY = 540;
+                this.dot.style.left = '960px';
+                this.dot.style.top = '540px';
             }
         }
 

@@ -94,9 +94,15 @@ async def stream_gaze_mapped_data_to_ws(labeled_device: LabeledDevice, labeled_s
         queue_result = await stream_gaze_mapped_data(labeled_device, labeled_surface_layouts)
         while True:
             result = await queue_result.get()
-            # convert to json
-            result_json = "gaze_mapped_data"
-            broadcast_nowait(result_json)
+            # convert to json safely (json.dumps is not enough for datetime objects)
+
+            # Convert datetime to ISO format string for JSON serialization
+            result_json = {
+                "timestamp": result["timestamp"].isoformat(),
+                "surface_gaze": result["surface_gaze"]
+            }
+
+            broadcast_nowait(json.dumps(result_json))
     except Exception as e:
         import traceback
         traceback.print_exc()
