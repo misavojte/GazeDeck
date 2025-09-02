@@ -26,13 +26,13 @@ def add_test_device_discovery_parser(subparsers) -> argparse.ArgumentParser:
     test_discovery_parser.add_argument(
         "--duration",
         type=float,
-        default=3.0,
-        help="Device discovery window in seconds (default: 3.0).",
+        default=10.0,
+        help="Device discovery window in seconds (default: 10.0).",
     )
     return test_discovery_parser
 
 
-async def run_discovery_and_label(duration: float = 3.0) -> Dict[int, LabeledDevice]:
+async def run_discovery_and_label(duration: float = 10.0) -> Dict[int, LabeledDevice]:
     """
     Run device discovery and labeling for the specified duration.
 

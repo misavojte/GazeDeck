@@ -11,14 +11,14 @@ from pupil_labs.realtime_api import (
 
 # python
 import asyncio
-from typing import Dict, List, TypeVar, Tuple, Optional
-from asyncio import QueueEmpty, QueueFull, AsyncIterator
+from typing import Dict, TypeVar, Tuple, Optional, AsyncIterator
+from asyncio import QueueEmpty, QueueFull
 from datetime import datetime
 from dataclasses import dataclass
 
 # internal
 from gazedeck.core.device_labeling import LabeledDevice
-from gazedeck.core.gaze_mapper import GazeMapper, MarkerMappedGaze
+from gazedeck.core.gaze_mapper import GazeMapper
 from gazedeck.core.surface_layout_labeling import SurfaceLayoutLabeled
 
 # Generic type for sensor data items
@@ -57,14 +57,14 @@ async def stream_gaze_mapped_data(labeled_device: LabeledDevice, surface_layouts
         enqueue_sensor_data(
             receive_video_frames(sensor_video.url, run_loop=restart_on_disconnect),
             queue_video,
-            "Incoming video (device: %s)", labeled_device.label,
+            f"Incoming video (device: {labeled_device.label})",
         )
     )
     process_gaze = asyncio.create_task(
         enqueue_sensor_data(
             receive_gaze_data(sensor_gaze.url, run_loop=restart_on_disconnect),
             queue_gaze,
-            "Incoming gaze (device: %s)", labeled_device.label,
+            f"Incoming gaze (device: {labeled_device.label})",
         )
     )
     try:
@@ -135,8 +135,17 @@ async def match_and_map_gaze(queue_video: asyncio.Queue[VideoFrame], queue_gaze:
             surface_gaze: Dict[str, Optional[GazeMappedSurfaceResult]] = {surface_label: None for surface_label in surface_uid_dict.values()}
         else:
             # surfaces detected, map gaze to each surface
-            # TODO: CREATE WHOLE NEW MAPPER TO BETTER FIT OUT ACTUAL WORKFLOW
-            surface_gaze: Dict[str, Optional[GazeMappedSurfaceResult]] = {surface_label: GazeMappedSurfaceResult(gaze_mapped_result.mapped_gaze[surface_uid][0].x, gaze_mapped_result.mapped_gaze[surface_uid][0].y, gaze_mapped_result.mapped_gaze[surface_uid][0].is_on_surface) if gaze_mapped_result.mapped_gaze[surface_uid] else None for surface_label, surface_uid in surface_uid_dict.items()}
+            surface_gaze: Dict[str, Optional[GazeMappedSurfaceResult]] = {}
+            for surface_uid, surface_label in surface_uid_dict.items():
+                if surface_uid in gaze_mapped_result.mapped_gaze and gaze_mapped_result.mapped_gaze[surface_uid]:
+                    mapped_data = gaze_mapped_result.mapped_gaze[surface_uid][0]
+                    surface_gaze[surface_label] = GazeMappedSurfaceResult(
+                        x=mapped_data.x,
+                        y=mapped_data.y,
+                        is_on_surface=mapped_data.is_on_surface
+                    )
+                else:
+                    surface_gaze[surface_label] = None
         
         result: GazeMappedResult = {
             "timestamp": gaze_ts,

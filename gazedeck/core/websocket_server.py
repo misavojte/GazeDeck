@@ -18,6 +18,7 @@ import asyncio
 from typing import Set, Tuple
 import websockets
 from websockets.server import WebSocketServerProtocol
+import contextlib
 
 # Tune these to your needs
 CLIENT_QUEUE_MAX = 256       # per-client buffer; drop beyond this
@@ -67,7 +68,7 @@ async def start_ws_server(host: str = "0.0.0.0", port: int = 8765) -> Tuple[webs
         # ... elsewhere: broadcast_nowait("hello")
     """
     server = await websockets.serve(
-        _client_handler, host, port,
+        _safe_client_handler, host, port,
         compression=None,   # save CPU; clients get raw speed
         max_size=None,      # allow large frames if needed
         ping_interval=20.0, # keep connections healthy
@@ -75,6 +76,24 @@ async def start_ws_server(host: str = "0.0.0.0", port: int = 8765) -> Tuple[webs
     )
     btask = asyncio.create_task(_broadcaster())
     return server, btask
+
+async def _safe_client_handler(ws: WebSocketServerProtocol) -> None:
+    """
+    Safe client handler that ignores invalid HTTP requests.
+    (We don't want the server to crash for invalid HTTP requests)
+    """
+    try:
+        await _client_handler(ws)
+    except websockets.exceptions.InvalidMessage as e:
+        if "did not receive a valid HTTP request" in str(e):
+            # Try to get more info about the request
+            try:
+                remote_addr = ws.remote_address
+                print(f"ℹ️ Ignored HTTP request from {remote_addr} to WebSocket endpoint")
+            except:
+                print(f"ℹ️ Ignored invalid HTTP request to WebSocket endpoint")
+        else:
+            print(f"⚠️ WebSocket InvalidMessage error: {e}")
 
 def broadcast_nowait(msg: str | bytes) -> None:
     """
