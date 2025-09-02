@@ -34,21 +34,24 @@ async def _client_handler(ws: WebSocketServerProtocol) -> None:
     """
     q: asyncio.Queue = asyncio.Queue(maxsize=CLIENT_QUEUE_MAX)
     _clients.add(q)
+    print(f"👤 New WebSocket client connected. Total clients: {len(_clients)}")
     try:
         while True:
             msg = await q.get()
             await ws.send(msg)  # str or bytes
-    except Exception:
+    except Exception as e:
         # ConnectionClosed or any send error → drop client
         pass
     finally:
         _clients.discard(q)
+        print(f"👋 WebSocket client removed. Total clients: {len(_clients)}")
 
 async def _broadcaster() -> None:
     """
     Fans out messages from the global queue to each client queue.
     Drops per-client if its queue is full (keeps fast clients fast).
     """
+    print("🎙️ Broadcaster task started")
     while True:
         msg = await _broadcast_q.get()
         for q in tuple(_clients):

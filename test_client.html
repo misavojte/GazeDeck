@@ -85,6 +85,37 @@
             text-align: center;
             max-width: 600px;
         }
+        .debug-info {
+            font-family: monospace;
+            background: #e9ecef;
+            padding: 8px;
+            border-radius: 3px;
+            margin: 5px auto;
+            font-size: 12px;
+            text-align: center;
+            max-width: 600px;
+        }
+        .debug-surface {
+            display: inline-block;
+            background: #28a745;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            margin: 2px;
+            font-size: 11px;
+        }
+        .debug-surface.missing {
+            background: #dc3545;
+        }
+        .debug-fps {
+            display: inline-block;
+            background: #007bff;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            margin: 2px;
+            font-size: 11px;
+        }
         .header {
             text-align: center;
             margin: 10px 0;
@@ -142,6 +173,14 @@
             <strong>Screen:</strong> <span id="screenSize">--</span>
         </div>
 
+        <div class="debug-info">
+            <div class="debug-fps" id="fpsCounter">WS: -- Hz</div>
+            <div class="debug-fps" id="msgCounter">Msgs: 0</div>
+            <div id="surfaceStatus">
+                <div class="debug-surface missing" id="surfaceIndicator">Surface: --</div>
+            </div>
+        </div>
+
         <div class="screen" id="screen">
             <!-- AprilTag markers positioned EXACTLY according to surface_layout.yaml coordinates -->
             <!-- Each marker is 100x100px positioned at top-left corner coordinates -->
@@ -194,6 +233,14 @@
                 this.currentY = 540;  // Center of 1080px height
                 this.smoothing = 0.3; // Lower = smoother but more lag
 
+                // Debug tracking variables
+                this.messageCount = 0;
+                this.lastMessageTime = null;
+                this.messageTimestamps = [];
+                this.fpsCounter = document.getElementById('fpsCounter');
+                this.msgCounter = document.getElementById('msgCounter');
+                this.surfaceIndicator = document.getElementById('surfaceIndicator');
+
                 this.bindEvents();
                 this.updateScreenSize();
             }
@@ -221,20 +268,67 @@
                 };
 
                 this.ws.onmessage = (event) => {
-                    console.log('WebSocket message received - Raw data:', event.data);
-
                     try {
                         const data = JSON.parse(event.data);
-                        console.log('Parsed WebSocket message:', data);
+                        const now = Date.now();
 
-                        if (data.type === 'connection_established') {
+                        // Update message counter and timing
+                        this.messageCount++;
+                        this.msgCounter.textContent = `Msgs: ${this.messageCount}`;
+
+                        // Track message timestamps for FPS calculation
+                        this.messageTimestamps.push(now);
+                        // Keep only last 60 timestamps for rolling average
+                        if (this.messageTimestamps.length > 60) {
+                            this.messageTimestamps = this.messageTimestamps.slice(-60);
+                        }
+
+                        // Calculate FPS based on message frequency
+                        if (this.messageTimestamps.length >= 2) {
+                            const timeSpan = now - this.messageTimestamps[0];
+                            const fps = (this.messageTimestamps.length - 1) / (timeSpan / 1000);
+                            this.fpsCounter.textContent = `WS: ${fps.toFixed(1)} Hz`;
+                        }
+
+                        if (data.surface_gaze && data.timestamp) {
+                            // Handle GazeDeck gaze data format
+                            const surfaceNames = Object.keys(data.surface_gaze);
+                            if (surfaceNames.length > 0) {
+                                const firstSurface = surfaceNames[0];
+                                const gazeData = data.surface_gaze[firstSurface];
+
+                                // Update surface detection indicator
+                                if (gazeData) {
+                                    if (gazeData.is_on_surface) {
+                                        this.surfaceIndicator.textContent = `Surface: ${firstSurface} ✓`;
+                                        this.surfaceIndicator.className = 'debug-surface';
+                                    } else {
+                                        this.surfaceIndicator.textContent = `Surface: ${firstSurface} ✗`;
+                                        this.surfaceIndicator.className = 'debug-surface missing';
+                                    }
+                                    // Always update gaze position if we have gaze data, regardless of surface detection
+                                    this.showDot();
+                                    this.updateGazePosition(gazeData.x, gazeData.y);
+                                } else {
+                                    this.surfaceIndicator.textContent = `Surface: ${firstSurface} (no data)`;
+                                    this.surfaceIndicator.className = 'debug-surface missing';
+                                    this.hideDot();
+                                }
+                            } else {
+                                this.surfaceIndicator.textContent = 'Surface: none';
+                                this.surfaceIndicator.className = 'debug-surface missing';
+                                this.hideDot();
+                            }
+                        } else if (data.type === 'connection_established') {
                             console.log('Connection established message:', data.message);
                             this.updateStatus('Connected and confirmed by server', 'connected');
                         } else if (data.type === 'gaze_data') {
-                            console.log('Gaze data received:', { x: data.x, y: data.y });
-                            this.updateGazePosition(data.x, data.y);
-                        } else {
-                            console.log('Unknown message type received:', data.type);
+                            if (data.x !== undefined && data.y !== undefined) {
+                                this.showDot();
+                                this.updateGazePosition(data.x, data.y);
+                            } else {
+                                this.hideDot();
+                            }
                         }
                     } catch (e) {
                         console.error('Failed to parse WebSocket message:', e);
@@ -252,6 +346,7 @@
                     this.connectBtn.disabled = false;
                     this.disconnectBtn.disabled = true;
                     this.hideDot();
+                    this.resetDebugCounters();
                 };
 
                 this.ws.onerror = (error) => {
@@ -271,9 +366,6 @@
                 // Convert to absolute screen coordinates (1920x1080)
                 const screenWidth = 1920;
                 const screenHeight = 1080;
-
-                // DEBUG: Log raw coordinates
-                console.log(`Raw gaze data - X: ${x.toFixed(3)}, Y: ${y.toFixed(3)}`);
 
                 // Try inverting Y axis - pupil labs might use inverted coordinate system
                 const absX = x * screenWidth;
@@ -318,6 +410,15 @@
                 this.currentY = 540;
                 this.dot.style.left = '960px';
                 this.dot.style.top = '540px';
+            }
+
+            resetDebugCounters() {
+                this.messageCount = 0;
+                this.messageTimestamps = [];
+                this.msgCounter.textContent = 'Msgs: 0';
+                this.fpsCounter.textContent = 'WS: -- Hz';
+                this.surfaceIndicator.textContent = 'Surface: --';
+                this.surfaceIndicator.className = 'debug-surface missing';
             }
         }
 

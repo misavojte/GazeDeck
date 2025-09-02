@@ -48,19 +48,23 @@ async def execute_stream(args: argparse.Namespace):
     Execute the stream command with the parsed arguments.
     """
     # discover and setup surface layouts
+    print("🔍 Discovering surface layouts...")
     labeled_surface_layouts = await setup_labeled_surface_layouts_cli(args.directory)
+    print(f"📋 Found {len(labeled_surface_layouts)} labeled surface layouts: {list(labeled_surface_layouts.keys())}")
     if len(labeled_surface_layouts) == 0:
-        print("No labeled surface layouts found. Please generate or label at least one surface layout first.")
+        print("❌ No labeled surface layouts found. Please generate or label at least one surface layout first.")
         return
-    
+
     # discover and setup devices
+    print(f"🔍 Discovering devices for {args.duration}s...")
     labeled_devices = await setup_labeled_devices_cli(args.duration)
+    print(f"📋 Found {len(labeled_devices)} labeled devices: {list(labeled_devices.keys())}")
     if len(labeled_devices) == 0:
-        print("No labeled devices found. Please discover and label at least one device first.")
+        print("❌ No labeled devices found. Please discover and label at least one device first.")
         return
 
     # Start WebSocket server
-    print("Starting WebSocket server on ws://localhost:8765")
+    print("🚀 Starting WebSocket server on ws://localhost:8765")
     server, broadcaster_task = await start_ws_server(host="localhost", port=8765)
 
     try:
@@ -91,18 +95,36 @@ async def stream_gaze_mapped_data_to_ws(labeled_device: LabeledDevice, labeled_s
     Stream gaze mapped data from a single device to a WebSocket server.
     """
     try:
+        print(f"🎯 Starting gaze streaming for device: {labeled_device.label}")
         queue_result = await stream_gaze_mapped_data(labeled_device, labeled_surface_layouts)
+        print(f"📡 Queue created for device {labeled_device.label}, waiting for gaze data...")
+
+        message_count = 0
         while True:
             result = await queue_result.get()
-            # convert to json safely (json.dumps is not enough for datetime objects)
+            message_count += 1
 
+            # convert to json safely (json.dumps is not enough for datetime objects)
             # Convert datetime to ISO format string for JSON serialization
+            # Convert GazeMappedSurfaceResult dataclass objects to dictionaries
+            surface_gaze_dict = {}
+            for surface_name, surface_result in result.surface_gaze.items():
+                if surface_result is None:
+                    surface_gaze_dict[surface_name] = None
+                else:
+                    surface_gaze_dict[surface_name] = {
+                        "x": surface_result.x,
+                        "y": surface_result.y,
+                        "is_on_surface": surface_result.is_on_surface
+                    }
+
             result_json = {
-                "timestamp": result["timestamp"].isoformat(),
-                "surface_gaze": result["surface_gaze"]
+                "timestamp": result.timestamp.isoformat(),
+                "surface_gaze": surface_gaze_dict
             }
 
             broadcast_nowait(json.dumps(result_json))
+
     except Exception as e:
         import traceback
         traceback.print_exc()

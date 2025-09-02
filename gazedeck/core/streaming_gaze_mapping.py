@@ -37,12 +37,15 @@ class GazeMappedResult:
 
 async def stream_gaze_mapped_data(labeled_device: LabeledDevice, surface_layouts: Dict[int, SurfaceLayoutLabeled]) -> asyncio.Queue[GazeMappedResult]:
 
+    print(f"🔗 Connecting to device: {labeled_device.label}")
     status = await labeled_device.device.get_status()
     sensor_gaze = status.direct_gaze_sensor()
+    print(f"👁️ Gaze sensor connected: {sensor_gaze.connected}, URL: {sensor_gaze.url}")
     if not sensor_gaze.connected:
         raise RuntimeError("Could not connect to direct gaze sensor for device labeled as %s", labeled_device.label)
-    
+
     sensor_video = status.direct_world_sensor()
+    print(f"📹 Video sensor connected: {sensor_video.connected}, URL: {sensor_video.url}")
     if not sensor_video.connected:
         raise RuntimeError("Could not connect to direct world sensor (FPV camera) for device labeled as %s", labeled_device.label)
 
@@ -67,20 +70,24 @@ async def stream_gaze_mapped_data(labeled_device: LabeledDevice, surface_layouts
             f"Incoming gaze (device: {labeled_device.label})",
         )
     )
-    try:
-        await match_and_map_gaze(queue_video, queue_gaze, queue_result, labeled_device.camera_calibration, surface_layouts)
-    finally:
-        process_video.cancel()
-        process_gaze.cancel()
-
+    # Start the gaze mapping task but don't await it - it runs forever
+    mapping_task = asyncio.create_task(
+        match_and_map_gaze(queue_video, queue_gaze, queue_result, labeled_device.camera_calibration, surface_layouts)
+    )
+    
+    print(f"✅ Gaze mapping task started for device {labeled_device.label}, returning queue")
     return queue_result
 
 async def enqueue_sensor_data(sensor: AsyncIterator[T], queue: asyncio.Queue[T], label: str) -> None:
+    print(f"🎬 Starting sensor data collection for: {label}")
+    count = 0
     async for datum in sensor:
+        count += 1
         try:
             queue.put_nowait((datum.datetime, datum))
         except QueueFull:
-            print(f"Queue for {label} is full, dropping {datum}")
+            # Queue full - drop this datum silently for performance
+            pass
 
 async def get_most_recent_item(queue: asyncio.Queue[T]) -> Tuple[datetime, T]:
     item = await queue.get()
@@ -109,7 +116,9 @@ async def get_closest_item(queue: asyncio.Queue[T], timestamp: datetime) -> Tupl
 
 
 async def match_and_map_gaze(queue_video: asyncio.Queue[VideoFrame], queue_gaze: asyncio.Queue[GazeData], output_queue: asyncio.Queue[GazeMappedResult], calibration: Calibration, surface_layouts: Dict[int, SurfaceLayoutLabeled]) -> None:
-    
+
+    print(f"🗺️ Initializing gaze mapper with {len(surface_layouts)} surface layouts")
+
     # initialize gaze mapper
     gaze_mapper = GazeMapper(calibration) # init without surfaces, we need to use .add_surface()
 
@@ -118,9 +127,14 @@ async def match_and_map_gaze(queue_video: asyncio.Queue[VideoFrame], queue_gaze:
     for surface_layout in surface_layouts.values():
         created_surface = gaze_mapper.add_surface(surface_layout.tags, surface_layout.size, surface_layout.label)
         surface_uid_dict[created_surface.uid] = surface_layout.label
+
+    print(f"📋 Surface mapping: {surface_uid_dict}")
+    print("🔄 Starting gaze mapping loop...")
     
     # process gaze and video data
+    frame_count = 0
     while True:
+        frame_count += 1
         video_ts, video_item = await get_most_recent_item(queue_video)
         gaze_ts, gaze_item = await get_closest_item(queue_gaze, video_ts)
 
@@ -147,10 +161,10 @@ async def match_and_map_gaze(queue_video: asyncio.Queue[VideoFrame], queue_gaze:
                 else:
                     surface_gaze[surface_label] = None
         
-        result: GazeMappedResult = {
-            "timestamp": gaze_ts,
-            "surface_gaze": surface_gaze,
-        }
-        
+        result = GazeMappedResult(
+            timestamp=gaze_ts,
+            surface_gaze=surface_gaze,
+        )
+
         output_queue.put_nowait(result)
 
