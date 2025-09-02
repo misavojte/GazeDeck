@@ -51,10 +51,14 @@ async def stream_gaze_mapped_data(labeled_device: LabeledDevice, surface_layouts
 
     restart_on_disconnect = True
     
-    queue_video: asyncio.Queue[VideoFrame] = asyncio.Queue()
-    queue_gaze: asyncio.Queue[GazeData] = asyncio.Queue()
+    # We must limit the queue size to avoid memory issues
+    MAX_QUEUE_VIDEO_SIZE = 10
+    MAX_QUEUE_GAZE_SIZE = 256
+
+    queue_video: asyncio.Queue[VideoFrame] = asyncio.Queue(maxsize=MAX_QUEUE_VIDEO_SIZE)
+    queue_gaze: asyncio.Queue[GazeData] = asyncio.Queue(maxsize=MAX_QUEUE_GAZE_SIZE)
     # this will be consumed by the caller and we need to pass it to the caller
-    queue_result: asyncio.Queue[GazeMappedResult] = asyncio.Queue()
+    queue_result: asyncio.Queue[GazeMappedResult] = asyncio.Queue(maxsize=MAX_QUEUE_GAZE_SIZE)
     
     process_video = asyncio.create_task(
         enqueue_sensor_data(

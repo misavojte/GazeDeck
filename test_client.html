@@ -63,15 +63,43 @@
         }
         .dot {
             position: absolute;
-            width: 20px;
-            height: 20px;
-            background: radial-gradient(circle, #ff4444, #cc0000);
+            width: 80px;
+            height: 80px;
+            background: transparent;
+            border: 5px solid #ff4444;
             border-radius: 50%;
             pointer-events: none;
             transition: all 0.1s ease-out;
-            box-shadow: 0 0 10px rgba(255, 68, 68, 0.5);
+            box-shadow: 0 0 25px rgba(255, 68, 68, 0.5);
             opacity: 0;
             z-index: 10;
+        }
+
+        .dot.pulse {
+            animation: gazePulse 1.2s ease-out;
+        }
+
+        @keyframes gazePulse {
+            0% {
+                transform: scale(1);
+                box-shadow: 0 0 25px rgba(255, 68, 68, 0.5);
+            }
+            25% {
+                transform: scale(1.8);
+                box-shadow: 0 0 60px rgba(255, 68, 68, 0.9), 0 0 120px rgba(255, 68, 68, 0.6);
+            }
+            50% {
+                transform: scale(2.2);
+                box-shadow: 0 0 80px rgba(255, 68, 68, 1.0), 0 0 160px rgba(255, 68, 68, 0.8);
+            }
+            75% {
+                transform: scale(1.8);
+                box-shadow: 0 0 60px rgba(255, 68, 68, 0.9), 0 0 120px rgba(255, 68, 68, 0.6);
+            }
+            100% {
+                transform: scale(1);
+                box-shadow: 0 0 25px rgba(255, 68, 68, 0.5);
+            }
         }
         .dot.smoothing {
             transition: all 0.15s ease-out;
@@ -244,6 +272,7 @@
                 • 12 AprilTags positioned exactly at surface_layout.yaml coordinates
                 • Green = Connected, Red = Disconnected
                 • Y-axis inverted (Pupil Labs coordinate system)
+                • Dot pulses dramatically when gaze remains stable for 0.8 seconds (once per position)
                 • Load external websites via iframe to test gaze interaction
                 • Check browser console for debug info
             </div>
@@ -272,6 +301,16 @@
                 this.currentX = 960;  // Center of 1920px width
                 this.currentY = 540;  // Center of 1080px height
                 this.smoothing = 0.3; // Lower = smoother but more lag
+
+                // Stability tracking for pulsing
+                this.stabilityThreshold = 20; // pixels of movement considered stable
+                this.stabilityDuration = 800; // milliseconds to remain stable before pulsing
+                this.positionHistory = [];
+                this.historySize = 30; // track last 30 positions for stability check
+                this.lastStableTime = null;
+                this.lastPulseTime = 0;
+                this.lastPulsePosition = null; // track position of last pulse
+                this.positionChangeThreshold = 50; // minimum distance to trigger new pulse
 
                 // Debug tracking variables
                 this.messageCount = 0;
@@ -430,6 +469,78 @@
                 // Update dot position
                 this.dot.style.left = this.currentX + 'px';
                 this.dot.style.top = this.currentY + 'px';
+
+                // Check for stability and trigger pulse if needed
+                this.checkStabilityAndPulse();
+            }
+
+            checkStabilityAndPulse() {
+                const now = Date.now();
+                const currentPos = { x: this.currentX, y: this.currentY };
+
+                // Add current position to history
+                this.positionHistory.push({ pos: currentPos, time: now });
+
+                // Keep only recent history
+                if (this.positionHistory.length > this.historySize) {
+                    this.positionHistory = this.positionHistory.slice(-this.historySize);
+                }
+
+                // Need at least a few samples to check stability
+                if (this.positionHistory.length < 5) {
+                    this.lastStableTime = null;
+                    return;
+                }
+
+                // Check if position has been stable
+                const recentPositions = this.positionHistory.slice(-5);
+                const firstPos = recentPositions[0].pos;
+                const isStable = recentPositions.every(entry => {
+                    const distance = Math.sqrt(
+                        Math.pow(entry.pos.x - firstPos.x, 2) +
+                        Math.pow(entry.pos.y - firstPos.y, 2)
+                    );
+                    return distance < this.stabilityThreshold;
+                });
+
+                if (isStable) {
+                    if (this.lastStableTime === null) {
+                        this.lastStableTime = now;
+                    } else if (now - this.lastStableTime >= this.stabilityDuration) {
+                        // Check if we've moved far enough from the last pulse position
+                        const shouldPulse = !this.lastPulsePosition ||
+                            Math.sqrt(
+                                Math.pow(this.currentX - this.lastPulsePosition.x, 2) +
+                                Math.pow(this.currentY - this.lastPulsePosition.y, 2)
+                            ) >= this.positionChangeThreshold;
+
+                        if (shouldPulse) {
+                            // Position has been stable for required duration and is different from last pulse
+                            this.triggerPulse();
+                            this.lastPulseTime = now;
+                            this.lastPulsePosition = { x: this.currentX, y: this.currentY };
+                        }
+                    }
+                } else {
+                    // Position moved, reset stability timer
+                    this.lastStableTime = null;
+                }
+            }
+
+            triggerPulse() {
+                // Remove existing pulse class to restart animation
+                this.dot.classList.remove('pulse');
+
+                // Force reflow to restart animation
+                this.dot.offsetHeight;
+
+                // Add pulse class to trigger animation
+                this.dot.classList.add('pulse');
+
+                // Remove the class after animation completes
+                setTimeout(() => {
+                    this.dot.classList.remove('pulse');
+                }, 1200); // Match new animation duration (1.2s)
             }
 
             updateStatus(message, className) {
@@ -458,6 +569,12 @@
                 this.currentY = 540;
                 this.dot.style.left = '960px';
                 this.dot.style.top = '540px';
+
+                // Reset stability tracking when clearing path
+                this.positionHistory = [];
+                this.lastStableTime = null;
+                this.lastPulseTime = 0;
+                this.lastPulsePosition = null;
             }
 
             resetDebugCounters() {
@@ -467,6 +584,12 @@
                 this.fpsCounter.textContent = 'WS: -- Hz';
                 this.surfaceIndicator.textContent = 'Surface: --';
                 this.surfaceIndicator.className = 'debug-surface missing';
+
+                // Reset stability tracking
+                this.positionHistory = [];
+                this.lastStableTime = null;
+                this.lastPulseTime = 0;
+                this.lastPulsePosition = null;
             }
 
             addIframe() {

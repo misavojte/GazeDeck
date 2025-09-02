@@ -197,8 +197,8 @@ class ApriltagDetector:
         families = "tag36h11"
         self._camera_model = camera_model
         self._detector = pupil_apriltags.Detector(
-            families=families, nthreads=2, quad_decimate=0, decode_sharpening=1.0, quad_sigma=0.8, refine_edges=1, debug=0
-        ) #changed from quad_decimate=2.0 to quad_decimate=0, quad_sigma=0.0 to quad_sigma=0.8
+            families=families, nthreads=4, quad_decimate=1.0, decode_sharpening=0.0, quad_sigma=0.0, debug=0
+        ) #changed from quad_decimate=2.0 to quad_decimate=0,
 
     def detect_from_image(self, image: npt.NDArray[np.uint8]) -> List[Marker]:
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
