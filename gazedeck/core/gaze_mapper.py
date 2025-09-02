@@ -113,16 +113,30 @@ class GazeMapper:
 
         for marker_id, marker_verts in markers_verts.items():
             verts_norm = np.array(marker_verts) / surface_size
-            verts_norm[:,1] = 1 - verts_norm[:,1]
+            # REMOVED THE FLIP, different from original code
+            # verts_norm[:,1] = 1 - verts_norm[:,1]
 
+            # ORIGINAL CODE:
+            # marker = _CoreMarker(
+            #     create_apriltag_marker_uid('tag36h11', marker_id),
+            #     CoordinateSpace.SURFACE_UNDISTORTED,
+            #     {
+            #         CornerId.TOP_LEFT: verts_norm[3],
+            #         CornerId.BOTTOM_LEFT: verts_norm[0],
+            #         CornerId.TOP_RIGHT: verts_norm[2],
+            #         CornerId.BOTTOM_RIGHT: verts_norm[1],
+            #     }
+            # )
+
+            # NEW CODE:
             marker = _CoreMarker(
                 create_apriltag_marker_uid('tag36h11', marker_id),
                 CoordinateSpace.SURFACE_UNDISTORTED,
                 {
-                    CornerId.TOP_LEFT: verts_norm[3],
-                    CornerId.BOTTOM_LEFT: verts_norm[0],
-                    CornerId.TOP_RIGHT: verts_norm[2],
-                    CornerId.BOTTOM_RIGHT: verts_norm[1],
+                    CornerId.TOP_LEFT: verts_norm[0],
+                    CornerId.TOP_RIGHT: verts_norm[1],
+                    CornerId.BOTTOM_RIGHT: verts_norm[2],
+                    CornerId.BOTTOM_LEFT: verts_norm[3],
                 }
             )
             surface._add_marker(marker)
@@ -183,8 +197,8 @@ class ApriltagDetector:
         families = "tag36h11"
         self._camera_model = camera_model
         self._detector = pupil_apriltags.Detector(
-            families=families, nthreads=2, quad_decimate=0, decode_sharpening=1.0
-        ) #changed from quad_decimate=2.0 to quad_decimate=0
+            families=families, nthreads=2, quad_decimate=0, decode_sharpening=1.0, quad_sigma=0.8, refine_edges=1, debug=0
+        ) #changed from quad_decimate=2.0 to quad_decimate=0, quad_sigma=0.0 to quad_sigma=0.8
 
     def detect_from_image(self, image: npt.NDArray[np.uint8]) -> List[Marker]:
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -224,9 +238,21 @@ class ApriltagDetector:
         vertices = [[point] for point in apriltag_marker.corners]
         vertices = self._camera_model.undistort_points_on_image_plane(vertices)
 
-        # TODO: Verify this is correct...
-        starting_with = CornerId.TOP_LEFT
-        clockwise = True
+        # ORIGINAL CODE:
+        # # TODO: Verify this is correct...
+        # starting_with = CornerId.TOP_LEFT
+        # clockwise = True
+
+        # CURRENT CORRECT CODE:
+        # The following code is correct!!!
+        # It behaves far better when there is only one marker in the image,
+        # Even if this seems illogical, it is correct.
+        # The test with ONE APRILTAG shows the correct behavior.
+        #
+        # This is what is returned by the underlying C library,
+        # TODO: verify with accademic paper or code directly.
+        starting_with = CornerId.TOP_RIGHT
+        clockwise = False
 
         return Marker.from_vertices(
             uid=uid,

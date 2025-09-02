@@ -53,12 +53,13 @@
         }
         .apriltag {
             position: absolute;
-            width: 100px;
-            height: 100px;
+            width: 125px;
+            height: 125px;
             opacity: 1;
             pointer-events: none;
-            border: 1px solid #ff0000;
+            border: 12.5px solid white;
             box-sizing: border-box;
+            z-index: 8;
         }
         .dot {
             position: absolute;
@@ -128,6 +129,34 @@
             margin: 10px 0;
             padding: 10px;
         }
+        .iframe-controls {
+            margin: 10px 0;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 5px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .iframe-controls input {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 300px;
+            font-size: 14px;
+        }
+        .iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border: none;
+            z-index: 5;
+            background: white;
+        }
         button {
             padding: 8px 16px;
             margin: 0 5px;
@@ -166,6 +195,13 @@
             <button id="clearBtn">Clear Path</button>
         </div>
 
+        <div class="iframe-controls">
+            <label for="iframeUrl">External Website:</label>
+            <input type="url" id="iframeUrl" placeholder="https://example.com" />
+            <button id="addIframeBtn">Load Website</button>
+            <button id="removeIframeBtn" disabled>Remove Website</button>
+        </div>
+
         <div class="coordinates">
             <strong>X:</strong> <span id="xCoord">--</span> |
             <strong>Y:</strong> <span id="yCoord">--</span> |
@@ -183,31 +219,32 @@
 
         <div class="screen" id="screen">
             <!-- AprilTag markers positioned EXACTLY according to surface_layout.yaml coordinates -->
-            <!-- Each marker is 100x100px positioned at top-left corner coordinates -->
-            <img src="output/surface1/tag_0.png" class="apriltag" style="left: 25px; top: 25px;" alt="AprilTag 0 (25,25)">
-            <img src="output/surface1/tag_1.png" class="apriltag" style="left: 467.5px; top: 25px;" alt="AprilTag 1 (467.5,25)">
-            <img src="output/surface1/tag_2.png" class="apriltag" style="left: 910px; top: 25px;" alt="AprilTag 2 (910,25)">
-            <img src="output/surface1/tag_3.png" class="apriltag" style="left: 1352.5px; top: 25px;" alt="AprilTag 3 (1352.5,25)">
-            <img src="output/surface1/tag_4.png" class="apriltag" style="left: 1795px; top: 25px;" alt="AprilTag 4 (1795,25)">
+            <!-- Each marker is 125x125px (100x100px content + 12.5px white border) positioned at top-left corner coordinates -->
+            <img src="output/surface1/tag_0.png" class="apriltag" style="left: 12.5px; top: 12.5px;" alt="AprilTag 0 (25,25)">
+            <img src="output/surface1/tag_1.png" class="apriltag" style="left: 455px; top: 12.5px;" alt="AprilTag 1 (467.5,25)">
+            <img src="output/surface1/tag_2.png" class="apriltag" style="left: 897.5px; top: 12.5px;" alt="AprilTag 2 (910,25)">
+            <img src="output/surface1/tag_3.png" class="apriltag" style="left: 1340px; top: 12.5px;" alt="AprilTag 3 (1352.5,25)">
+            <img src="output/surface1/tag_4.png" class="apriltag" style="left: 1782.5px; top: 12.5px;" alt="AprilTag 4 (1795,25)">
 
-            <img src="output/surface1/tag_5.png" class="apriltag" style="left: 25px; top: 490px;" alt="AprilTag 5 (25,490)">
-            <img src="output/surface1/tag_6.png" class="apriltag" style="left: 1795px; top: 490px;" alt="AprilTag 6 (1795,490)">
-            <img src="output/surface1/tag_7.png" class="apriltag" style="left: 25px; top: 955px;" alt="AprilTag 7 (25,955)">
-            <img src="output/surface1/tag_8.png" class="apriltag" style="left: 467.5px; top: 955px;" alt="AprilTag 8 (467.5,955)">
-            <img src="output/surface1/tag_9.png" class="apriltag" style="left: 910px; top: 955px;" alt="AprilTag 9 (910,955)">
-            <img src="output/surface1/tag_10.png" class="apriltag" style="left: 1352.5px; top: 955px;" alt="AprilTag 10 (1352.5,955)">
-            <img src="output/surface1/tag_11.png" class="apriltag" style="left: 1795px; top: 955px;" alt="AprilTag 11 (1795,955)">
+            <img src="output/surface1/tag_5.png" class="apriltag" style="left: 12.5px; top: 477.5px;" alt="AprilTag 5 (25,490)">
+            <img src="output/surface1/tag_6.png" class="apriltag" style="left: 1782.5px; top: 477.5px;" alt="AprilTag 6 (1795,490)">
+            <img src="output/surface1/tag_7.png" class="apriltag" style="left: 12.5px; top: 942.5px;" alt="AprilTag 7 (25,955)">
+            <img src="output/surface1/tag_8.png" class="apriltag" style="left: 455px; top: 942.5px;" alt="AprilTag 8 (467.5,955)">
+            <img src="output/surface1/tag_9.png" class="apriltag" style="left: 897.5px; top: 942.5px;" alt="AprilTag 9 (910,955)">
+            <img src="output/surface1/tag_10.png" class="apriltag" style="left: 1340px; top: 942.5px;" alt="AprilTag 10 (1352.5,955)">
+            <img src="output/surface1/tag_11.png" class="apriltag" style="left: 1782.5px; top: 942.5px;" alt="AprilTag 11 (1795,955)">
 
             <div class="dot" id="gazeDot"></div>
         </div>
 
         <div class="info" style="text-align: center; margin-top: 20px; font-size: 11px; color: #888;">
-            <div style="display: inline-block; text-align: left; max-width: 800px;">
+            <div style="display: inline-block; text-align: left; max-width: 1000px;">
                 <strong>Quick Guide:</strong>
                 • Red dot shows gaze position on 1920×1080 screen
                 • 12 AprilTags positioned exactly at surface_layout.yaml coordinates
                 • Green = Connected, Red = Disconnected
                 • Y-axis inverted (Pupil Labs coordinate system)
+                • Load external websites via iframe to test gaze interaction
                 • Check browser console for debug info
             </div>
         </div>
@@ -227,6 +264,9 @@
                 this.clearBtn = document.getElementById('clearBtn');
                 this.screen = document.getElementById('screen');
                 this.screenSize = document.getElementById('screenSize');
+                this.iframeUrl = document.getElementById('iframeUrl');
+                this.addIframeBtn = document.getElementById('addIframeBtn');
+                this.removeIframeBtn = document.getElementById('removeIframeBtn');
 
                 // Smoothing variables
                 this.currentX = 960;  // Center of 1920px width
@@ -249,6 +289,13 @@
                 this.connectBtn.addEventListener('click', () => this.connect());
                 this.disconnectBtn.addEventListener('click', () => this.disconnect());
                 this.clearBtn.addEventListener('click', () => this.clearPath());
+                this.addIframeBtn.addEventListener('click', () => this.addIframe());
+                this.removeIframeBtn.addEventListener('click', () => this.removeIframe());
+                this.iframeUrl.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        this.addIframe();
+                    }
+                });
             }
 
             connect() {
@@ -367,9 +414,10 @@
                 const screenWidth = 1920;
                 const screenHeight = 1080;
 
-                // Try inverting Y axis - pupil labs might use inverted coordinate system
+                // GazeDeck uses standard screen coordinates: Y increases downwards
+                // (0,0) = top-left, (1,1) = bottom-right - NO inversion needed
                 const absX = x * screenWidth;
-                const absY = (1.0 - y) * screenHeight;  // INVERT Y AXIS
+                const absY = y * screenHeight;  // DO NOT invert Y axis
 
                 // Update coordinate display (show both relative and absolute)
                 this.xCoord.textContent = `${x.toFixed(3)} (${absX.toFixed(0)}px)`;
@@ -419,6 +467,46 @@
                 this.fpsCounter.textContent = 'WS: -- Hz';
                 this.surfaceIndicator.textContent = 'Surface: --';
                 this.surfaceIndicator.className = 'debug-surface missing';
+            }
+
+            addIframe() {
+                const url = this.iframeUrl.value.trim();
+                if (!url) {
+                    alert('Please enter a valid URL');
+                    return;
+                }
+
+                // Remove existing iframe if any
+                this.removeIframe();
+
+                // Create new iframe
+                const iframe = document.createElement('iframe');
+                iframe.src = url;
+                iframe.className = 'iframe';
+                iframe.allow = 'fullscreen';
+
+                // Add iframe to screen
+                this.screen.appendChild(iframe);
+
+                // Update button states
+                this.addIframeBtn.disabled = true;
+                this.removeIframeBtn.disabled = false;
+                this.iframeUrl.disabled = true;
+
+                console.log('Loaded iframe with URL:', url);
+            }
+
+            removeIframe() {
+                const existingIframe = this.screen.querySelector('.iframe');
+                if (existingIframe) {
+                    existingIframe.remove();
+                    console.log('Removed iframe');
+                }
+
+                // Reset button states
+                this.addIframeBtn.disabled = false;
+                this.removeIframeBtn.disabled = true;
+                this.iframeUrl.disabled = false;
             }
         }
 
