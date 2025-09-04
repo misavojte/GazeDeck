@@ -11,7 +11,7 @@ from pupil_labs.realtime_api import (
 
 # python
 import asyncio
-from typing import Dict, TypeVar, Tuple, Optional, AsyncIterator
+from typing import Dict, TypeVar, Tuple, Optional, AsyncIterator, Any
 from asyncio import QueueEmpty, QueueFull
 from datetime import datetime
 from dataclasses import dataclass
@@ -35,7 +35,7 @@ class GazeMappedResult:
     timestamp: datetime
     surface_gaze: Dict[str, Optional[GazeMappedSurfaceResult]]
 
-async def stream_gaze_mapped_data(labeled_device: LabeledDevice, surface_layouts: Dict[int, SurfaceLayoutLabeled]) -> asyncio.Queue[GazeMappedResult]:
+async def stream_gaze_mapped_data(labeled_device: LabeledDevice, surface_layouts: Dict[int, SurfaceLayoutLabeled], apriltag_params: Dict[str, Any]) -> asyncio.Queue[GazeMappedResult]:
 
     print(f"🔗 Connecting to device: {labeled_device.label}")
     status = await labeled_device.device.get_status()
@@ -76,7 +76,7 @@ async def stream_gaze_mapped_data(labeled_device: LabeledDevice, surface_layouts
     )
     # Start the gaze mapping task but don't await it - it runs forever
     mapping_task = asyncio.create_task(
-        match_and_map_gaze(queue_video, queue_gaze, queue_result, labeled_device.camera_calibration, surface_layouts)
+        match_and_map_gaze(queue_video, queue_gaze, queue_result, labeled_device.camera_calibration, surface_layouts, apriltag_params)
     )
     
     print(f"✅ Gaze mapping task started for device {labeled_device.label}, returning queue")
@@ -119,12 +119,12 @@ async def get_closest_item(queue: asyncio.Queue[T], timestamp: datetime) -> Tupl
             item_ts, item = next_item_ts, next_item
 
 
-async def match_and_map_gaze(queue_video: asyncio.Queue[VideoFrame], queue_gaze: asyncio.Queue[GazeData], output_queue: asyncio.Queue[GazeMappedResult], calibration: Calibration, surface_layouts: Dict[int, SurfaceLayoutLabeled]) -> None:
+async def match_and_map_gaze(queue_video: asyncio.Queue[VideoFrame], queue_gaze: asyncio.Queue[GazeData], output_queue: asyncio.Queue[GazeMappedResult], calibration: Calibration, surface_layouts: Dict[int, SurfaceLayoutLabeled], apriltag_params: Dict[str, Any]) -> None:
 
     print(f"🗺️ Initializing gaze mapper with {len(surface_layouts)} surface layouts")
 
     # initialize gaze mapper
-    gaze_mapper = GazeMapper(calibration) # init without surfaces, we need to use .add_surface()
+    gaze_mapper = GazeMapper(calibration, apriltag_params=apriltag_params) # init without surfaces, we need to use .add_surface()
 
     # key is gaze_mapper surface id, value is surface_layout label
     surface_uid_dict = {}

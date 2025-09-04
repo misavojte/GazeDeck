@@ -7,7 +7,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-from typing import Dict
+from typing import Dict, Any
 
 from gazedeck.cli.setup_labeled_devices import setup_labeled_devices_cli
 from gazedeck.cli.setup_labeled_surface_layouts import setup_labeled_surface_layouts_cli
@@ -40,6 +40,38 @@ def add_stream_parser(subparsers) -> argparse.ArgumentParser:
         default=10.0,
         help="Device discovery window in seconds (default: 10.0).",
     )
+
+    # AprilTag detector parameters
+    stream_parser.add_argument(
+        "--apriltag-nthreads",
+        type=int,
+        default=4,
+        help="Number of threads for AprilTag detection (default: 4).",
+    )
+    stream_parser.add_argument(
+        "--apriltag-quad-decimate",
+        type=float,
+        default=1.0,
+        help="Quad decimation factor for AprilTag detection (default: 1.0).",
+    )
+    stream_parser.add_argument(
+        "--apriltag-decode-sharpening",
+        type=float,
+        default=0.0,
+        help="Decode sharpening factor for AprilTag detection (default: 0.0).",
+    )
+    stream_parser.add_argument(
+        "--apriltag-quad-sigma",
+        type=float,
+        default=0.0,
+        help="Quad sigma factor for AprilTag detection (default: 0.0).",
+    )
+    stream_parser.add_argument(
+        "--apriltag-debug",
+        type=int,
+        default=0,
+        help="Debug level for AprilTag detection (default: 0).",
+    )
     return stream_parser
 
 
@@ -68,8 +100,16 @@ async def execute_stream(args: argparse.Namespace):
     server, broadcaster_task = await start_ws_server(host="localhost", port=8765)
 
     try:
+        apriltag_params = {
+            'nthreads': args.apriltag_nthreads,
+            'quad_decimate': args.apriltag_quad_decimate,
+            'decode_sharpening': args.apriltag_decode_sharpening,
+            'quad_sigma': args.apriltag_quad_sigma,
+            'debug': args.apriltag_debug,
+        }
+
         stream_tasks = [
-            asyncio.create_task(stream_gaze_mapped_data_to_ws(labeled_device, labeled_surface_layouts)) for labeled_device in labeled_devices.values()
+            asyncio.create_task(stream_gaze_mapped_data_to_ws(labeled_device, labeled_surface_layouts, apriltag_params)) for labeled_device in labeled_devices.values()
         ]
 
         print("All streams started")
@@ -90,13 +130,13 @@ async def execute_stream(args: argparse.Namespace):
 
 
 
-async def stream_gaze_mapped_data_to_ws(labeled_device: LabeledDevice, labeled_surface_layouts: Dict[int, SurfaceLayoutLabeled]):
+async def stream_gaze_mapped_data_to_ws(labeled_device: LabeledDevice, labeled_surface_layouts: Dict[int, SurfaceLayoutLabeled], apriltag_params: Dict[str, Any]):
     """
     Stream gaze mapped data from a single device to a WebSocket server.
     """
     try:
         print(f"🎯 Starting gaze streaming for device: {labeled_device.label}")
-        queue_result = await stream_gaze_mapped_data(labeled_device, labeled_surface_layouts)
+        queue_result = await stream_gaze_mapped_data(labeled_device, labeled_surface_layouts, apriltag_params)
         print(f"📡 Queue created for device {labeled_device.label}, waiting for gaze data...")
 
         message_count = 0

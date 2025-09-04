@@ -6,6 +6,7 @@ Real-time screen gaze tracking system using Pupil Labs hardware and AprilTag mar
 
 - **Real-time Gaze Tracking**: Stream gaze data mapped to screen coordinates using Pupil Labs eye trackers
 - **AprilTag Surface Mapping**: Generate and detect AprilTag markers for accurate surface calibration
+- **Configurable AprilTag Detection**: Fine-tune detection parameters for optimal performance in various environments
 - **WebSocket Streaming**: Broadcast gaze data to multiple clients in real-time
 - **Multi-device Support**: Handle multiple Pupil Labs devices simultaneously
 - **Flexible Surface Configuration**: Generate custom AprilTag layouts for different screen sizes
@@ -116,10 +117,27 @@ Start real-time gaze streaming with surface mapping:
 ```bash
 # Stream with default settings
 python -m gazedeck stream
+```
 
+```bash
 # Custom directory and discovery time
 python -m gazedeck stream --directory ./surfaces --duration 20
 ```
+
+```bash
+# Fine-tune AprilTag detection performance
+python -m gazedeck stream \
+    --apriltag-nthreads 8 \
+    --apriltag-quad-decimate 0.5 \
+    --apriltag-debug 1
+```
+
+**AprilTag Detection Parameters**:
+- **`--apriltag-nthreads`**: Increase for better performance on multi-core systems
+- **`--apriltag-quad-decimate`**: Lower values (0.5-1.0) improve detection at the cost of speed
+- **`--apriltag-decode-sharpening`**: Increase (0.1-1.0) for noisy or low-contrast markers
+- **`--apriltag-quad-sigma`**: Gaussian blur for quad detection (0.0-2.0)
+- **`--apriltag-debug`**: Enable debug output (0=off, 1=basic, 2=detailed)
 
 ### Generated Files Structure
 
@@ -236,6 +254,11 @@ ws.onmessage = (event) => {
 |--------|---------|-------------|
 | `--directory` | . | Directory to search for surface layouts |
 | `--duration` | 10.0 | Device discovery window in seconds |
+| `--apriltag-nthreads` | 4 | Number of threads for AprilTag detection |
+| `--apriltag-quad-decimate` | 1.0 | Quad decimation factor for AprilTag detection |
+| `--apriltag-decode-sharpening` | 0.0 | Decode sharpening factor for AprilTag detection |
+| `--apriltag-quad-sigma` | 0.0 | Quad sigma factor for AprilTag detection |
+| `--apriltag-debug` | 0 | Debug level for AprilTag detection |
 
 ### Test Commands
 

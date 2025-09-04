@@ -4,7 +4,7 @@
 import os
 import sys
 import uuid
-from typing import Dict, Iterable, List, Mapping, NamedTuple, Optional, Tuple
+from typing import Dict, Iterable, List, Mapping, NamedTuple, Optional, Tuple, Any
 
 import cv2
 import numpy as np
@@ -32,10 +32,12 @@ class GazeMapper:
         self,
         calibration,
         surfaces: Iterable[Surface] = (),
+        apriltag_params: Optional[Dict[str, Any]] = None, # added from initial implementation
     ) -> None:
         self._camera: Optional[Radial_Dist_Camera]
         self._detector: Optional[ApriltagDetector]
         self._tracker = SurfaceTracker()
+        self._apriltag_params = apriltag_params or {} # added from initial implementation
 
         self._surfaces: List[Surface] = list(surfaces)
         self._recent_result: Optional[MarkerMapperResult] = None
@@ -159,7 +161,7 @@ class GazeMapper:
     @camera.setter
     def camera(self, camera: Optional["Radial_Dist_Camera"]) -> None:
         self._camera = camera
-        self._detector = ApriltagDetector(camera)
+        self._detector = ApriltagDetector(camera, self._apriltag_params)
 
     @property
     def surfaces(self) -> Tuple[Surface]:
@@ -193,12 +195,18 @@ def create_apriltag_marker_uid(tag_family: str, tag_id: int) -> MarkerId:
 
 
 class ApriltagDetector:
-    def __init__(self, camera_model: Radial_Dist_Camera):
+    def __init__(self, camera_model: Radial_Dist_Camera, apriltag_params: Optional[Dict[str, Any]] = None): # added apriltag_params from initial implementation
         families = "tag36h11"
         self._camera_model = camera_model
+        params = apriltag_params or {} # added apriltag_params from initial implementation
         self._detector = pupil_apriltags.Detector(
-            families=families, nthreads=4, quad_decimate=1.0, decode_sharpening=0.0, quad_sigma=0.0, debug=0
-        ) #changed from quad_decimate=2.0 to quad_decimate=0,
+            families=families,
+            nthreads=params.get('nthreads', 4),
+            quad_decimate=params.get('quad_decimate', 1.0),
+            decode_sharpening=params.get('decode_sharpening', 0.0),
+            quad_sigma=params.get('quad_sigma', 0.0),
+            debug=params.get('debug', 0)
+        )
 
     def detect_from_image(self, image: npt.NDArray[np.uint8]) -> List[Marker]:
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
