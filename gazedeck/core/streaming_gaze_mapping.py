@@ -17,6 +17,7 @@ from dataclasses import dataclass
 
 # internal
 from gazedeck.core.device_labeling import LabeledDevice
+from gazedeck.core.device_senzors import get_sensor_urls
 from gazedeck.core.gaze_mapper import GazeMapper
 from gazedeck.core.surface_layout_labeling import SurfaceLayoutLabeled
 from gazedeck.core.queues import enqueue_sensor_data, get_most_recent_item, get_closest_item
@@ -34,17 +35,7 @@ class GazeMappedResult:
 
 async def stream_gaze_mapped_data(labeled_device: LabeledDevice, surface_layouts: Dict[int, SurfaceLayoutLabeled], apriltag_params: Dict[str, Any]) -> asyncio.Queue[GazeMappedResult]:
 
-    print(f"🔗 Connecting to device: {labeled_device.label}")
-    status = await labeled_device.device.get_status()
-    sensor_gaze = status.direct_gaze_sensor()
-    print(f"👁️ Gaze sensor connected: {sensor_gaze.connected}, URL: {sensor_gaze.url}")
-    if not sensor_gaze.connected:
-        raise RuntimeError("Could not connect to direct gaze sensor for device labeled as %s", labeled_device.label)
-
-    sensor_video = status.direct_world_sensor()
-    print(f"📹 Video sensor connected: {sensor_video.connected}, URL: {sensor_video.url}")
-    if not sensor_video.connected:
-        raise RuntimeError("Could not connect to direct world sensor (FPV camera) for device labeled as %s", labeled_device.label)
+    sensor_gaze_url, sensor_video_url = await get_sensor_urls(labeled_device)
 
     restart_on_disconnect = True
     
@@ -60,7 +51,7 @@ async def stream_gaze_mapped_data(labeled_device: LabeledDevice, surface_layouts
     # Start the video collection tasks
     asyncio.create_task(
         enqueue_sensor_data(
-            receive_video_frames(sensor_video.url, run_loop=restart_on_disconnect),
+            receive_video_frames(sensor_video_url, run_loop=restart_on_disconnect),
             queue_video,
             f"Incoming video (device: {labeled_device.label})",
         )
@@ -69,7 +60,7 @@ async def stream_gaze_mapped_data(labeled_device: LabeledDevice, surface_layouts
     # Start the gaze collection task
     asyncio.create_task(
         enqueue_sensor_data(
-            receive_gaze_data(sensor_gaze.url, run_loop=restart_on_disconnect),
+            receive_gaze_data(sensor_gaze_url, run_loop=restart_on_disconnect),
             queue_gaze,
             f"Incoming gaze (device: {labeled_device.label})",
         )
