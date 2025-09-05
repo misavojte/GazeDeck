@@ -11,18 +11,15 @@ from pupil_labs.realtime_api import (
 
 # python
 import asyncio
-from typing import Dict, TypeVar, Tuple, Optional, AsyncIterator, Any
-from asyncio import QueueEmpty, QueueFull
 from datetime import datetime
+from typing import Dict, Optional, Any
 from dataclasses import dataclass
 
 # internal
 from gazedeck.core.device_labeling import LabeledDevice
 from gazedeck.core.gaze_mapper import GazeMapper
 from gazedeck.core.surface_layout_labeling import SurfaceLayoutLabeled
-
-# Generic type for sensor data items
-T = TypeVar('T')
+from gazedeck.core.queues import enqueue_sensor_data, get_most_recent_item, get_closest_item
 
 @dataclass(frozen=True)
 class GazeMappedSurfaceResult:
@@ -60,64 +57,31 @@ async def stream_gaze_mapped_data(labeled_device: LabeledDevice, surface_layouts
     # this will be consumed by the caller and we need to pass it to the caller
     queue_result: asyncio.Queue[GazeMappedResult] = asyncio.Queue(maxsize=MAX_QUEUE_GAZE_SIZE)
     
-    process_video = asyncio.create_task(
+    # Start the video collection tasks
+    asyncio.create_task(
         enqueue_sensor_data(
             receive_video_frames(sensor_video.url, run_loop=restart_on_disconnect),
             queue_video,
             f"Incoming video (device: {labeled_device.label})",
         )
     )
-    process_gaze = asyncio.create_task(
+
+    # Start the gaze collection task
+    asyncio.create_task(
         enqueue_sensor_data(
             receive_gaze_data(sensor_gaze.url, run_loop=restart_on_disconnect),
             queue_gaze,
             f"Incoming gaze (device: {labeled_device.label})",
         )
     )
+
     # Start the gaze mapping task but don't await it - it runs forever
-    mapping_task = asyncio.create_task(
+    asyncio.create_task(
         match_and_map_gaze(queue_video, queue_gaze, queue_result, labeled_device.camera_calibration, surface_layouts, apriltag_params)
     )
     
     print(f"✅ Gaze mapping task started for device {labeled_device.label}, returning queue")
     return queue_result
-
-async def enqueue_sensor_data(sensor: AsyncIterator[T], queue: asyncio.Queue[T], label: str) -> None:
-    print(f"🎬 Starting sensor data collection for: {label}")
-    count = 0
-    async for datum in sensor:
-        count += 1
-        try:
-            queue.put_nowait((datum.datetime, datum))
-        except QueueFull:
-            # Queue full - drop this datum silently for performance
-            pass
-
-async def get_most_recent_item(queue: asyncio.Queue[T]) -> Tuple[datetime, T]:
-    item = await queue.get()
-    while True:
-        try:
-            next_item = queue.get_nowait()
-        except QueueEmpty:
-            return item
-        else:
-            item = next_item
-
-async def get_closest_item(queue: asyncio.Queue[T], timestamp: datetime) -> Tuple[datetime, T]:
-    item_ts, item = await queue.get()
-    # assumes monotonically increasing timestamps
-    if item_ts > timestamp:
-        return item_ts, item
-    while True:
-        try:
-            next_item_ts, next_item = queue.get_nowait()
-        except QueueEmpty:
-            return item_ts, item
-        else:
-            if next_item_ts > timestamp:
-                return next_item_ts, next_item
-            item_ts, item = next_item_ts, next_item
-
 
 async def match_and_map_gaze(queue_video: asyncio.Queue[VideoFrame], queue_gaze: asyncio.Queue[GazeData], output_queue: asyncio.Queue[GazeMappedResult], calibration: Calibration, surface_layouts: Dict[int, SurfaceLayoutLabeled], apriltag_params: Dict[str, Any]) -> None:
 
