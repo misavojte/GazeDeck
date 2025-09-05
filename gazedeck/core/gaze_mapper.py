@@ -216,14 +216,26 @@ class ApriltagDetector:
         # Detect apriltag markers from the gray image
         markers = self._detector.detect(gray)
 
-        # Ensure detected markers are unique
-        # TODO: Between deplicate markers, pick the one with higher confidence
-        uid_fn = self.__apiltag_marker_uid
-        markers = {uid_fn(m): m for m in markers}.values()
+        # ORIGINAL CODE (kept for reference):
+        # # Ensure detected markers are unique
+        # # TODO: Between duplicate markers, pick the one with higher confidence
+        # uid_fn = self.__apiltag_marker_uid
+        # markers = {uid_fn(m): m for m in markers}.values()
+        #
+        # # Convert apriltag markers into surface tracker markers
+        # marker_fn = self.__apriltag_marker_to_surface_marker
+        # markers = [marker_fn(m) for m in markers]
+
+        # OPTIMIZED CODE:
+        # Deduplicate markers by UID, keeping the one with highest decision_margin (confidence)
+        unique_markers = {}
+        for marker in markers:
+            uid = self.__apiltag_marker_uid(marker)
+            if uid not in unique_markers or marker.decision_margin > unique_markers[uid].decision_margin:
+                unique_markers[uid] = marker
 
         # Convert apriltag markers into surface tracker markers
-        marker_fn = self.__apriltag_marker_to_surface_marker
-        markers = [marker_fn(m) for m in markers]
+        markers = [self.__apriltag_marker_to_surface_marker(m) for m in unique_markers.values()]
 
         return markers
 
