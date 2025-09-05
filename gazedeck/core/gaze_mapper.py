@@ -12,6 +12,8 @@ import numpy.typing as npt
 import pupil_apriltags
 from pupil_labs.realtime_api import GazeData
 
+TAG_FAMILY = "tag36h11"
+
 from surface_tracker import (
     CoordinateSpace,
     CornerId,
@@ -132,7 +134,7 @@ class GazeMapper:
 
             # NEW CODE:
             marker = _CoreMarker(
-                create_apriltag_marker_uid('tag36h11', marker_id),
+                create_apriltag_marker_uid(TAG_FAMILY, marker_id),
                 CoordinateSpace.SURFACE_UNDISTORTED,
                 {
                     CornerId.TOP_LEFT: verts_norm[0],
@@ -196,7 +198,7 @@ def create_apriltag_marker_uid(tag_family: str, tag_id: int) -> MarkerId:
 
 class ApriltagDetector:
     def __init__(self, camera_model: Radial_Dist_Camera, apriltag_params: Optional[Dict[str, Any]] = None): # added apriltag_params from initial implementation
-        families = "tag36h11"
+        families = TAG_FAMILY
         self._camera_model = camera_model
         params = apriltag_params or {} # added apriltag_params from initial implementation
         self._detector = pupil_apriltags.Detector(
@@ -230,7 +232,7 @@ class ApriltagDetector:
         # Deduplicate markers by UID, keeping the one with highest decision_margin (confidence)
         unique_markers = {}
         for marker in markers:
-            uid = self.__apiltag_marker_uid(marker)
+            uid = create_apriltag_marker_uid(TAG_FAMILY, marker.tag_id)
             if uid not in unique_markers or marker.decision_margin > unique_markers[uid].decision_margin:
                 unique_markers[uid] = marker
 
@@ -239,20 +241,26 @@ class ApriltagDetector:
 
         return markers
 
-    @staticmethod
-    def __apiltag_marker_uid(
-        apriltag_marker: pupil_apriltags.Detection,
-    ) -> MarkerId:
-        family = apriltag_marker.tag_family.decode("utf-8")
-        tag_id = int(apriltag_marker.tag_id)
-        return create_apriltag_marker_uid(family, tag_id)
+    # ORIGINAL CODE (kept for reference):
+    # @staticmethod
+    # def __apiltag_marker_uid(
+    #     apriltag_marker: pupil_apriltags.Detection,
+    # ) -> MarkerId:
+    #     family = apriltag_marker.tag_family.decode("utf-8")
+    #     tag_id = int(apriltag_marker.tag_id)
+    #     return create_apriltag_marker_uid(family, tag_id)
 
     def __apriltag_marker_to_surface_marker(
         self, apriltag_marker: pupil_apriltags.Detection
     ) -> Marker:
 
+        # ORIGINAL CODE:
         # Construct the surface tracker marker UID
-        uid = ApriltagDetector.__apiltag_marker_uid(apriltag_marker)
+        # uid = ApriltagDetector.__apiltag_marker_uid(apriltag_marker)
+
+        # OPTIMIZED CODE:
+        # Always the same family
+        uid = create_apriltag_marker_uid(TAG_FAMILY, apriltag_marker.tag_id)
 
         # Extract vertices in the correct format form apriltag marker
         vertices = [[point] for point in apriltag_marker.corners]
