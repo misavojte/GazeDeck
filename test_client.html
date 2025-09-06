@@ -298,13 +298,13 @@
                 // Smoothing variables
                 this.currentX = 960;  // Center of 1920px width
                 this.currentY = 540;  // Center of 1080px height
-                this.smoothing = 0.3; // Lower = smoother but more lag
+                this.smoothing = 0.05; // Lower = smoother but more lag
 
                 // Stability tracking for pulsing
                 this.stabilityThreshold = 20; // pixels of movement considered stable
                 this.stabilityDuration = 800; // milliseconds to remain stable before pulsing
                 this.positionHistory = [];
-                this.historySize = 30; // track last 30 positions for stability check
+                this.historyTimeWindow = 500; // check stability over last 500ms of positions
                 this.lastStableTime = null;
                 this.lastPulseTime = 0;
                 this.lastPulsePosition = null; // track position of last pulse
@@ -500,19 +500,18 @@
                 // Add current position to history
                 this.positionHistory.push({ pos: currentPos, time: now });
 
-                // Keep only recent history
-                if (this.positionHistory.length > this.historySize) {
-                    this.positionHistory = this.positionHistory.slice(-this.historySize);
-                }
+                // Remove old positions outside our time window
+                const cutoffTime = now - this.historyTimeWindow;
+                this.positionHistory = this.positionHistory.filter(entry => entry.time >= cutoffTime);
 
-                // Need at least a few samples to check stability
-                if (this.positionHistory.length < 5) {
+                // Need at least a few samples within the time window to check stability
+                if (this.positionHistory.length < 3) {
                     this.lastStableTime = null;
                     return;
                 }
 
-                // Check if position has been stable
-                const recentPositions = this.positionHistory.slice(-5);
+                // Check if position has been stable within the time window
+                const recentPositions = this.positionHistory;
                 const firstPos = recentPositions[0].pos;
                 const isStable = recentPositions.every(entry => {
                     const distance = Math.sqrt(
@@ -661,11 +660,14 @@
 
             isCurrentlyStable() {
                 // Helper method to check if gaze is currently stable
-                if (this.positionHistory.length < 5) {
+                const now = Date.now();
+                const cutoffTime = now - this.historyTimeWindow;
+                const recentPositions = this.positionHistory.filter(entry => entry.time >= cutoffTime);
+
+                if (recentPositions.length < 3) {
                     return false;
                 }
 
-                const recentPositions = this.positionHistory.slice(-5);
                 const firstPos = recentPositions[0].pos;
                 return recentPositions.every(entry => {
                     const distance = Math.sqrt(
