@@ -89,41 +89,93 @@ async def match_and_map_gaze(queue_video: asyncio.Queue[VideoFrame], queue_gaze:
 
     print(f"📋 Surface mapping: {surface_uid_dict}")
     print("🔄 Starting gaze mapping loop...")
-    
-    # process gaze and video data
-    frame_count = 0
-    while True:
-        frame_count += 1
-        video_ts, video_item = await get_most_recent_item(queue_video)
-        gaze_ts, gaze_item = await get_closest_item(queue_gaze, video_ts)
 
-        # process the frame and gaze data
-        # add this to the asyncio thread pool
-        gaze_mapped_result = await asyncio.to_thread(gaze_mapper.process_frame, video_item, gaze_item)
-        
-        # create result to put into queue (TODO: RIGHT NOW DISTORTED, NEED TO UNDISTORT IN FUTURE)
-        # for each surface, add the gaze mapped result
-        if gaze_mapped_result is None:
-            # no surfaces detected, emit None for each surface
-            surface_gaze: Dict[str, Optional[GazeMappedSurfaceResult]] = {surface_label: None for surface_label in surface_uid_dict.values()}
-        else:
-            # surfaces detected, map gaze to each surface
-            surface_gaze: Dict[str, Optional[GazeMappedSurfaceResult]] = {}
-            for surface_uid, surface_label in surface_uid_dict.items():
-                if surface_uid in gaze_mapped_result.mapped_gaze and gaze_mapped_result.mapped_gaze[surface_uid]:
-                    mapped_data = gaze_mapped_result.mapped_gaze[surface_uid][0]
-                    surface_gaze[surface_label] = GazeMappedSurfaceResult(
-                        x=mapped_data.x,
-                        y=mapped_data.y,
-                        is_on_surface=mapped_data.is_on_aoi
-                    )
+    # NEW IMPLEMENTATION: Decouple surface detection (video fps) from gaze processing (higher frequency)
+    latest_surface_result = None
+
+    # Task to continuously process video frames for surface detection
+    async def process_video_frames():
+        nonlocal latest_surface_result
+        while True:
+            video_ts, video_item = await get_most_recent_item(queue_video)
+            # Process only the video frame for surface detection
+            await asyncio.to_thread(gaze_mapper.process_scene, video_item)
+            # Store the latest surface detection result
+            latest_surface_result = gaze_mapper._surface_locations
+
+    # Task to continuously process gaze data using latest surface detection
+    async def process_gaze_data():
+        while True:
+            gaze_ts, gaze_item = await get_most_recent_item(queue_gaze)
+            if latest_surface_result is None:
+                # No surface detected yet, emit None for all surfaces
+                surface_gaze: Dict[str, Optional[GazeMappedSurfaceResult]] = {surface_label: None for surface_label in surface_uid_dict.values()}
+            else:
+                # Process gaze using the latest surface detection
+                gaze_mapped_result = await asyncio.to_thread(gaze_mapper.process_gaze, gaze_item)
+
+                if gaze_mapped_result is None:
+                    surface_gaze = {surface_label: None for surface_label in surface_uid_dict.values()}
                 else:
-                    surface_gaze[surface_label] = None
-        
-        result = GazeMappedResult(
-            timestamp=gaze_ts,
-            surface_gaze=surface_gaze,
-        )
+                    surface_gaze: Dict[str, Optional[GazeMappedSurfaceResult]] = {}
+                    for surface_uid, surface_label in surface_uid_dict.items():
+                        if surface_uid in gaze_mapped_result.mapped_gaze and gaze_mapped_result.mapped_gaze[surface_uid]:
+                            mapped_data = gaze_mapped_result.mapped_gaze[surface_uid][0]
+                            surface_gaze[surface_label] = GazeMappedSurfaceResult(
+                                x=mapped_data.x,
+                                y=mapped_data.y,
+                                is_on_surface=mapped_data.is_on_aoi
+                            )
+                        else:
+                            surface_gaze[surface_label] = None
 
-        output_queue.put_nowait(result)
+            result = GazeMappedResult(
+                timestamp=gaze_ts,
+                surface_gaze=surface_gaze,
+            )
+            output_queue.put_nowait(result)
+
+    # Start both tasks
+    await asyncio.gather(
+        process_video_frames(),
+        process_gaze_data()
+    )
+
+    # ORIGINAL IMPLEMENTATION (commented out for reference):
+    # # process gaze and video data
+    # frame_count = 0
+    # while True:
+    #     frame_count += 1
+    #     video_ts, video_item = await get_most_recent_item(queue_video)
+    #     gaze_ts, gaze_item = await get_closest_item(queue_gaze, video_ts)
+    #
+    #     # process the frame and gaze data
+    #     # add this to the asyncio thread pool
+    #     gaze_mapped_result = await asyncio.to_thread(gaze_mapper.process_frame, video_item, gaze_item)
+    #
+    #     # create result to put into queue (TODO: RIGHT NOW DISTORTED, NEED TO UNDISTORT IN FUTURE)
+    #     # for each surface, add the gaze mapped result
+    #     if gaze_mapped_result is None:
+    #         # no surfaces detected, emit None for each surface
+    #         surface_gaze: Dict[str, Optional[GazeMappedSurfaceResult]] = {surface_label: None for surface_label in surface_uid_dict.values()}
+    #     else:
+    #         # surfaces detected, map gaze to each surface
+    #         surface_gaze: Dict[str, Optional[GazeMappedSurfaceResult]] = {}
+    #         for surface_uid, surface_label in surface_uid_dict.items():
+    #             if surface_uid in gaze_mapped_result.mapped_gaze and gaze_mapped_result.mapped_gaze[surface_uid]:
+    #                 mapped_data = gaze_mapped_result.mapped_gaze[surface_uid][0]
+    #                 surface_gaze[surface_label] = GazeMappedSurfaceResult(
+    #                     x=mapped_data.x,
+    #                     y=mapped_data.y,
+    #                     is_on_surface=mapped_data.is_on_aoi
+    #                 )
+    #             else:
+    #                 surface_gaze[surface_label] = None
+    #
+    #     result = GazeMappedResult(
+    #         timestamp=gaze_ts,
+    #         surface_gaze=surface_gaze,
+    #     )
+    #
+    #     output_queue.put_nowait(result)
 

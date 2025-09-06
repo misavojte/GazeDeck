@@ -92,9 +92,10 @@ class GazeMapper:
 
             gaze_mapped_norm = location._map_from_image_to_surface(gaze_undistorted.reshape(1, 2))
 
+            # Fix: gaze_mapped_norm.tolist() returns list of lists, so we take the first (and only) element
+            norm_pos = gaze_mapped_norm.tolist()[0]
             mapped_gaze[location.surface_uid] = [
-                MarkerMappedGaze.from_norm_pos(surface_uid, norm, base)
-                for base, norm in zip(gaze, gaze_mapped_norm.tolist())
+                MarkerMappedGaze.from_norm_pos(surface_uid, norm_pos, gaze)
             ]
 
         return MarkerMapperResult(self._detected_markers, self._surface_locations, mapped_gaze)
