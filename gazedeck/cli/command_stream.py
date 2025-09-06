@@ -80,6 +80,14 @@ def add_stream_parser(subparsers) -> argparse.ArgumentParser:
         choices=[0, 1],
         help="Enable sub-pixel edge refinement for precise corner detection (default: 1).",
     )
+
+    # Gaze filter parameters
+    stream_parser.add_argument(
+        "--gaze-filter-alpha",
+        type=float,
+        default=0.25,
+        help="Exponential smoothing alpha for gaze filter (0.0-1.0, default: 0.25). Lower = smoother, higher = more responsive.",
+    )
     return stream_parser
 
 
@@ -119,7 +127,7 @@ async def execute_stream(args: argparse.Namespace):
         }
 
         stream_tasks = [
-            asyncio.create_task(stream_gaze_mapped_data_to_ws(labeled_device, labeled_surface_layouts, apriltag_params)) for labeled_device in labeled_devices.values()
+            asyncio.create_task(stream_gaze_mapped_data_to_ws(labeled_device, labeled_surface_layouts, apriltag_params, args.gaze_filter_alpha)) for labeled_device in labeled_devices.values()
         ]
 
         print("All streams started")
@@ -140,13 +148,13 @@ async def execute_stream(args: argparse.Namespace):
 
 
 
-async def stream_gaze_mapped_data_to_ws(labeled_device: LabeledDevice, labeled_surface_layouts: Dict[int, SurfaceLayoutLabeled], apriltag_params: Dict[str, Any]):
+async def stream_gaze_mapped_data_to_ws(labeled_device: LabeledDevice, labeled_surface_layouts: Dict[int, SurfaceLayoutLabeled], apriltag_params: Dict[str, Any], gaze_filter_alpha: float):
     """
     Stream gaze mapped data from a single device to a WebSocket server.
     """
     try:
         print(f"🎯 Starting gaze streaming for device: {labeled_device.label}")
-        queue_result = await stream_gaze_mapped_data(labeled_device, labeled_surface_layouts, apriltag_params)
+        queue_result = await stream_gaze_mapped_data(labeled_device, labeled_surface_layouts, apriltag_params, gaze_filter_alpha)
         print(f"📡 Queue created for device {labeled_device.label}, waiting for gaze data...")
 
         message_count = 0

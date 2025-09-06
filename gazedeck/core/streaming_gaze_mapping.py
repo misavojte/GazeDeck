@@ -34,7 +34,7 @@ class GazeMappedResult:
     timestamp: datetime
     surface_gaze: Dict[str, Optional[GazeMappedSurfaceResult]] # key is surface label, value is GazeMappedSurfaceResult
 
-async def stream_gaze_mapped_data(labeled_device: LabeledDevice, surface_layouts: Dict[int, SurfaceLayoutLabeled], apriltag_params: Dict[str, Any]) -> asyncio.Queue[GazeMappedResult]:
+async def stream_gaze_mapped_data(labeled_device: LabeledDevice, surface_layouts: Dict[int, SurfaceLayoutLabeled], apriltag_params: Dict[str, Any], gaze_filter_alpha: float = 0.25) -> asyncio.Queue[GazeMappedResult]:
 
     sensor_gaze_url, sensor_video_url = await get_sensor_urls(labeled_device)
 
@@ -69,13 +69,13 @@ async def stream_gaze_mapped_data(labeled_device: LabeledDevice, surface_layouts
 
     # Start the gaze mapping task but don't await it - it runs forever
     asyncio.create_task(
-        match_and_map_gaze(queue_video, queue_gaze, queue_result, labeled_device.camera_calibration, surface_layouts, apriltag_params)
+        match_and_map_gaze(queue_video, queue_gaze, queue_result, labeled_device.camera_calibration, surface_layouts, apriltag_params, gaze_filter_alpha)
     )
     
     print(f"✅ Gaze mapping task started for device {labeled_device.label}, returning queue")
     return queue_result
 
-async def match_and_map_gaze(queue_video: asyncio.Queue[VideoFrame], queue_gaze: asyncio.Queue[GazeData], output_queue: asyncio.Queue[GazeMappedResult], calibration: Calibration, surface_layouts: Dict[int, SurfaceLayoutLabeled], apriltag_params: Dict[str, Any]) -> None:
+async def match_and_map_gaze(queue_video: asyncio.Queue[VideoFrame], queue_gaze: asyncio.Queue[GazeData], output_queue: asyncio.Queue[GazeMappedResult], calibration: Calibration, surface_layouts: Dict[int, SurfaceLayoutLabeled], apriltag_params: Dict[str, Any], gaze_filter_alpha: float = 0.25) -> None:
 
     print(f"🗺️ Initializing gaze mapper with {len(surface_layouts)} surface layouts")
 
@@ -91,7 +91,7 @@ async def match_and_map_gaze(queue_video: asyncio.Queue[VideoFrame], queue_gaze:
     print(f"📋 Surface mapping: {surface_uid_dict}")
 
     # Initialize gaze filter
-    gaze_filter = ExponentialFilter(alpha=0.25)
+    gaze_filter = ExponentialFilter(alpha=gaze_filter_alpha)
 
     print("🔄 Starting gaze mapping loop...")
 
