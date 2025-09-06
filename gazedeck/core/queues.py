@@ -2,14 +2,14 @@
 
 # python
 import asyncio
-from typing import TypeVar, Tuple
+from typing import TypeVar, Tuple, AsyncIterator
 from asyncio import QueueEmpty, QueueFull
 from datetime import datetime
 
 # Generic type for sensor data items
 T = TypeVar('T')
 
-async def enqueue_sensor_data(sensor: asyncio.AsyncIterator[T], queue: asyncio.Queue[T], label: str) -> None:
+async def enqueue_sensor_data(sensor: AsyncIterator[T], queue: asyncio.Queue[T], label: str) -> None:
     print(f"🎬 Starting sensor data collection for: {label}")
     count = 0
     async for datum in sensor:

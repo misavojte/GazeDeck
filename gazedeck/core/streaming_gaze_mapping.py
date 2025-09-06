@@ -31,7 +31,7 @@ class GazeMappedSurfaceResult:
 @dataclass(frozen=True)
 class GazeMappedResult:
     timestamp: datetime
-    surface_gaze: Dict[str, Optional[GazeMappedSurfaceResult]]
+    surface_gaze: Dict[str, Optional[GazeMappedSurfaceResult]] # key is surface label, value is GazeMappedSurfaceResult
 
 async def stream_gaze_mapped_data(labeled_device: LabeledDevice, surface_layouts: Dict[int, SurfaceLayoutLabeled], apriltag_params: Dict[str, Any]) -> asyncio.Queue[GazeMappedResult]:
 
