@@ -79,7 +79,30 @@ async def ask_label_cli(idx: int, dev: Device) -> Optional[str]:
 
     def _prompt() -> str:
         try:
-            return input(f"Label for device {idx} [{description}] (blank=skip): ")
-        except EOFError:
-            return ""  # skip on EOF
-    return await asyncio.to_thread(_prompt)
+            import sys
+
+            # Check if we have a TTY (interactive terminal)
+            if not sys.stdin.isatty():
+                print(f"⚠️  Non-interactive terminal detected for device {idx}, auto-skipping...")
+                return ""
+
+            # Simple input with basic timeout handling
+            try:
+                result = input(f"Label for device {idx} [{description}] (blank=skip): ")
+                return result
+            except EOFError:
+                print(f"\n❌ EOF detected for device {idx}, skipping...")
+                return ""
+            except KeyboardInterrupt:
+                print(f"\n❌ Keyboard interrupt for device {idx}, skipping...")
+                return ""
+
+        except Exception as e:
+            print(f"\n❌ Error getting input for device {idx}: {e}, skipping...")
+            return ""
+
+    try:
+        return await asyncio.wait_for(asyncio.to_thread(_prompt), timeout=30.0)
+    except asyncio.TimeoutError:
+        print(f"\n⏰ Async timeout for device {idx}, skipping...")
+        return ""
