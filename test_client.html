@@ -295,10 +295,9 @@
                 // Dot visibility mode
                 this.dotMode = 'always'; // 'always' or 'onStay'
 
-                // Smoothing variables
+                // Position variables (no client-side smoothing - done server-side)
                 this.currentX = 960;  // Center of 1920px width
                 this.currentY = 540;  // Center of 1080px height
-                this.smoothing = 0.05; // Lower = smoother but more lag
 
                 // Stability tracking for pulsing
                 this.stabilityThreshold = 20; // pixels of movement considered stable
@@ -481,9 +480,9 @@
                 this.xCoord.textContent = `${x.toFixed(3)} (${absX.toFixed(0)}px)`;
                 this.yCoord.textContent = `${y.toFixed(3)} (${absY.toFixed(0)}px)`;
 
-                // Smooth the position using absolute coordinates
-                this.currentX += (absX - this.currentX) * this.smoothing;
-                this.currentY += (absY - this.currentY) * this.smoothing;
+                // Update position directly (smoothing done server-side)
+                this.currentX = absX;
+                this.currentY = absY;
 
                 // Update dot position
                 this.dot.style.left = this.currentX + 'px';

@@ -21,6 +21,7 @@ from gazedeck.core.device_senzors import get_sensor_urls
 from gazedeck.core.gaze_mapper import GazeMapper
 from gazedeck.core.surface_layout_labeling import SurfaceLayoutLabeled
 from gazedeck.core.queues import enqueue_sensor_data, get_most_recent_item, get_closest_item
+from gazedeck.core.gaze_filter import ExponentialFilter
 
 @dataclass(frozen=True)
 class GazeMappedSurfaceResult:
@@ -88,6 +89,10 @@ async def match_and_map_gaze(queue_video: asyncio.Queue[VideoFrame], queue_gaze:
         surface_uid_dict[created_surface.uid] = surface_layout.label
 
     print(f"📋 Surface mapping: {surface_uid_dict}")
+
+    # Initialize gaze filter
+    gaze_filter = ExponentialFilter(alpha=0.25)
+
     print("🔄 Starting gaze mapping loop...")
 
     # NEW IMPLEMENTATION: Decouple surface detection (video fps) from gaze processing (higher frequency)
@@ -121,9 +126,13 @@ async def match_and_map_gaze(queue_video: asyncio.Queue[VideoFrame], queue_gaze:
                     for surface_uid, surface_label in surface_uid_dict.items():
                         if surface_uid in gaze_mapped_result.mapped_gaze and gaze_mapped_result.mapped_gaze[surface_uid]:
                             mapped_data = gaze_mapped_result.mapped_gaze[surface_uid][0]
+
+                            # Apply filter
+                            smooth_x, smooth_y = gaze_filter.filter(mapped_data.x, mapped_data.y)
+
                             surface_gaze[surface_label] = GazeMappedSurfaceResult(
-                                x=mapped_data.x,
-                                y=mapped_data.y,
+                                x=smooth_x,
+                                y=smooth_y,
                                 is_on_surface=mapped_data.is_on_aoi
                             )
                         else:
