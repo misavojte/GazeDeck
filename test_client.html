@@ -63,14 +63,12 @@
         }
         .dot {
             position: absolute;
-            width: 80px;
-            height: 80px;
-            background: transparent;
-            border: 5px solid #ff4444;
+            width: 20px;
+            height: 20px;
+            background: #ff4444;
             border-radius: 50%;
             pointer-events: none;
             transition: all 0.1s ease-out;
-            box-shadow: 0 0 25px rgba(255, 68, 68, 0.5);
             opacity: 0;
             z-index: 10;
         }
@@ -82,23 +80,12 @@
         @keyframes gazePulse {
             0% {
                 transform: scale(1);
-                box-shadow: 0 0 25px rgba(255, 68, 68, 0.5);
-            }
-            25% {
-                transform: scale(1.8);
-                box-shadow: 0 0 60px rgba(255, 68, 68, 0.9), 0 0 120px rgba(255, 68, 68, 0.6);
             }
             50% {
-                transform: scale(2.2);
-                box-shadow: 0 0 80px rgba(255, 68, 68, 1.0), 0 0 160px rgba(255, 68, 68, 0.8);
-            }
-            75% {
-                transform: scale(1.8);
-                box-shadow: 0 0 60px rgba(255, 68, 68, 0.9), 0 0 120px rgba(255, 68, 68, 0.6);
+                transform: scale(2);
             }
             100% {
                 transform: scale(1);
-                box-shadow: 0 0 25px rgba(255, 68, 68, 0.5);
             }
         }
         .dot.smoothing {
@@ -221,6 +208,13 @@
             <button id="connectBtn">Connect</button>
             <button id="disconnectBtn" disabled>Disconnect</button>
             <button id="clearBtn">Clear Path</button>
+            <br><br>
+            <label>
+                <input type="radio" name="dotMode" value="always" checked> Dot Always Visible
+            </label>
+            <label style="margin-left: 20px;">
+                <input type="radio" name="dotMode" value="onStay"> Dot Only on Stay
+            </label>
         </div>
 
         <div class="iframe-controls">
@@ -296,6 +290,10 @@
                 this.iframeUrl = document.getElementById('iframeUrl');
                 this.addIframeBtn = document.getElementById('addIframeBtn');
                 this.removeIframeBtn = document.getElementById('removeIframeBtn');
+                this.dotModeRadios = document.querySelectorAll('input[name="dotMode"]');
+
+                // Dot visibility mode
+                this.dotMode = 'always'; // 'always' or 'onStay'
 
                 // Smoothing variables
                 this.currentX = 960;  // Center of 1920px width
@@ -334,6 +332,23 @@
                     if (e.key === 'Enter') {
                         this.addIframe();
                     }
+                });
+
+                // Dot mode radio button listeners
+                this.dotModeRadios.forEach(radio => {
+                    radio.addEventListener('change', (e) => {
+                        if (e.target.checked) {
+                            this.dotMode = e.target.value;
+                            console.log('Dot mode changed to:', this.dotMode);
+                            
+                            // If switching to onStay mode and not currently stable, hide dot
+                            if (this.dotMode === 'onStay' && !this.isCurrentlyStable()) {
+                                this.hideDot();
+                            } else if (this.dotMode === 'always' && this.ws && this.ws.readyState === WebSocket.OPEN) {
+                                this.showDot();
+                            }
+                        }
+                    });
                 });
             }
 
@@ -392,9 +407,11 @@
                                         this.surfaceIndicator.textContent = `Surface: ${firstSurface} ✗`;
                                         this.surfaceIndicator.className = 'debug-surface missing';
                                     }
-                                    // Always update gaze position if we have gaze data, regardless of surface detection
-                                    this.showDot();
+                                    // Update gaze position and show dot based on mode
                                     this.updateGazePosition(gazeData.x, gazeData.y);
+                                    if (this.dotMode === 'always') {
+                                        this.showDot();
+                                    }
                                 } else {
                                     this.surfaceIndicator.textContent = `Surface: ${firstSurface} (no data)`;
                                     this.surfaceIndicator.className = 'debug-surface missing';
@@ -410,8 +427,10 @@
                             this.updateStatus('Connected and confirmed by server', 'connected');
                         } else if (data.type === 'gaze_data') {
                             if (data.x !== undefined && data.y !== undefined) {
-                                this.showDot();
                                 this.updateGazePosition(data.x, data.y);
+                                if (this.dotMode === 'always') {
+                                    this.showDot();
+                                }
                             } else {
                                 this.hideDot();
                             }
@@ -506,6 +525,10 @@
                 if (isStable) {
                     if (this.lastStableTime === null) {
                         this.lastStableTime = now;
+                        // Show dot when becoming stable in onStay mode
+                        if (this.dotMode === 'onStay') {
+                            this.showDot();
+                        }
                     } else if (now - this.lastStableTime >= this.stabilityDuration) {
                         // Check if we've moved far enough from the last pulse position
                         const shouldPulse = !this.lastPulsePosition ||
@@ -524,6 +547,10 @@
                 } else {
                     // Position moved, reset stability timer
                     this.lastStableTime = null;
+                    // Hide dot when movement detected in onStay mode
+                    if (this.dotMode === 'onStay') {
+                        this.hideDot();
+                    }
                 }
             }
 
@@ -630,6 +657,23 @@
                 this.addIframeBtn.disabled = false;
                 this.removeIframeBtn.disabled = true;
                 this.iframeUrl.disabled = false;
+            }
+
+            isCurrentlyStable() {
+                // Helper method to check if gaze is currently stable
+                if (this.positionHistory.length < 5) {
+                    return false;
+                }
+
+                const recentPositions = this.positionHistory.slice(-5);
+                const firstPos = recentPositions[0].pos;
+                return recentPositions.every(entry => {
+                    const distance = Math.sqrt(
+                        Math.pow(entry.pos.x - firstPos.x, 2) +
+                        Math.pow(entry.pos.y - firstPos.y, 2)
+                    );
+                    return distance < this.stabilityThreshold;
+                });
             }
         }
 

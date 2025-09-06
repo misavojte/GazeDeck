@@ -46,31 +46,39 @@ def add_stream_parser(subparsers) -> argparse.ArgumentParser:
         "--apriltag-nthreads",
         type=int,
         default=4,
-        help="Number of threads for AprilTag detection (default: 4).",
+        help="Number of threads for AprilTag detection (default: 1 - optimized for quality).",
     )
     stream_parser.add_argument(
         "--apriltag-quad-decimate",
         type=float,
-        default=1.0,
-        help="Quad decimation factor for AprilTag detection (default: 1.0).",
+        default=0.5,
+        help="Quad decimation factor for AprilTag detection (default: 0.5 - higher resolution).",
     )
     stream_parser.add_argument(
         "--apriltag-decode-sharpening",
         type=float,
-        default=0.0,
-        help="Decode sharpening factor for AprilTag detection (default: 0.0).",
+        default=0.25,
+        help="Decode sharpening factor for AprilTag detection (default: 0.25 - enhanced detection).",
     )
     stream_parser.add_argument(
         "--apriltag-quad-sigma",
         type=float,
-        default=0.0,
-        help="Quad sigma factor for AprilTag detection (default: 0.0).",
+        default=0.5,
+        help="Quad sigma factor for AprilTag detection (default: 0.5 - stability enhancement).",
     )
     stream_parser.add_argument(
         "--apriltag-debug",
         type=int,
         default=0,
         help="Debug level for AprilTag detection (default: 0).",
+    )
+    # PRECISION PARAMETERS:
+    stream_parser.add_argument(
+        "--apriltag-refine-edges",
+        type=int,
+        default=1,
+        choices=[0, 1],
+        help="Enable sub-pixel edge refinement for precise corner detection (default: 1).",
     )
     return stream_parser
 
@@ -106,6 +114,8 @@ async def execute_stream(args: argparse.Namespace):
             'decode_sharpening': args.apriltag_decode_sharpening,
             'quad_sigma': args.apriltag_quad_sigma,
             'debug': args.apriltag_debug,
+            # PRECISION PARAMETERS:
+            'refine_edges': args.apriltag_refine_edges,
         }
 
         stream_tasks = [

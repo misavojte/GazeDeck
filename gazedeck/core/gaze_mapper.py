@@ -203,11 +203,13 @@ class ApriltagDetector:
         params = apriltag_params or {} # added apriltag_params from initial implementation
         self._detector = pupil_apriltags.Detector(
             families=families,
-            nthreads=params.get('nthreads', 4),
-            quad_decimate=params.get('quad_decimate', 1.0),
-            decode_sharpening=params.get('decode_sharpening', 0.0),
-            quad_sigma=params.get('quad_sigma', 0.0),
-            debug=params.get('debug', 0)
+            nthreads=params.get('nthreads', 1),                    # Reduced for quality over speed
+            quad_decimate=params.get('quad_decimate', 0.5),       # Higher resolution detection
+            decode_sharpening=params.get('decode_sharpening', 0.25),  # Sharpen for better detection
+            quad_sigma=params.get('quad_sigma', 0.5),             # Gaussian blur for stability
+            debug=params.get('debug', 0),
+            # PRECISION PARAMETERS (optimized for detection quality):
+            refine_edges=params.get('refine_edges', 1),           # Sub-pixel edge refinement
         )
 
     def detect_from_image(self, image: npt.NDArray[np.uint8]) -> List[Marker]:
