@@ -178,6 +178,7 @@ async def stream_gaze_mapped_data_to_ws(labeled_device: LabeledDevice, labeled_s
 
             result_json = {
                 "timestamp": result.timestamp.isoformat(),
+                "device": labeled_device.label,
                 "surface_gaze": surface_gaze_dict
             }
 

@@ -189,6 +189,7 @@ Gaze data is streamed as JSON objects with this structure:
 ```json
 {
   "timestamp": "2024-01-15T10:30:45.123456",
+  "device": "EyeTracker_001",
   "surface_gaze": {
     "my_screen": {
       "x": 0.734,
@@ -207,6 +208,7 @@ Gaze data is streamed as JSON objects with this structure:
 #### Field Descriptions
 
 - **`timestamp`**: ISO format timestamp of when the gaze data was captured
+- **`device`**: Label of the device that captured the gaze data
 - **`surface_gaze`**: Object containing gaze data for each detected surface
   - **`<surface_id>`**: Surface identifier (matches surface layout ID)
     - **`x`**: Normalized X coordinate (0.0 to 1.0, left to right)
