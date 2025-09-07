@@ -222,10 +222,12 @@ async def stream_gaze_mapped_data_to_ws(labeled_device: LabeledDevice, labeled_s
                         "y": surface_result.y,
                         "is_on_surface": surface_result.is_on_surface
                     }
-
+            device_id = labeled_device.label
+            if device_id is None:
+                raise ValueError("Device ID is not set")
             result_json = {
                 "timestamp": result.timestamp.isoformat(),
-                "device": labeled_device.label,
+                "device": device_id,
                 "surface_gaze": surface_gaze_dict
             }
 
