@@ -13,7 +13,8 @@ from gazedeck.cli.setup_labeled_devices import setup_labeled_devices_cli
 from gazedeck.cli.setup_labeled_surface_layouts import setup_labeled_surface_layouts_cli
 from gazedeck.core.device_labeling import LabeledDevice
 from gazedeck.core.streaming_gaze_mapping import stream_gaze_mapped_data
-from gazedeck.core.surface_layout_labeling import SurfaceLayoutLabeled
+from gazedeck.core.surface_layout_labeling import SurfaceLayoutLabeled, label_surface_layouts
+from gazedeck.core.surface_layout_discovery import discover_all_surface_layouts, SurfaceLayout
 from gazedeck.core.websocket_server import start_ws_server, stop_ws_server, broadcast_nowait
 
 def add_stream_parser(subparsers) -> argparse.ArgumentParser:
@@ -88,7 +89,39 @@ def add_stream_parser(subparsers) -> argparse.ArgumentParser:
         default=0.25,
         help="Exponential smoothing alpha for gaze filter (0.0-1.0, default: 0.25). Lower = smoother, higher = more responsive.",
     )
+
+    # Auto-label surface layouts
+    stream_parser.add_argument(
+        "--auto-label-surface",
+        action="store_true",
+        help="Automatically label surfaces based on their IDs instead of prompting for labels.",
+    )
     return stream_parser
+
+
+async def auto_label_surface_layouts(layouts: Dict[int, SurfaceLayout]) -> Dict[int, SurfaceLayoutLabeled]:
+    """
+    Automatically label surface layouts using their IDs directly as labels.
+
+    Args:
+        layouts: Dictionary of discovered surface layouts {index -> SurfaceLayout}
+
+    Returns:
+        Dictionary of auto-labeled surface layouts {index -> SurfaceLayoutLabeled}
+    """
+    labeled: Dict[int, SurfaceLayoutLabeled] = {}
+    for idx, layout in layouts.items():
+        # Use the surface ID directly as the label
+        auto_label = layout.id
+
+        labeled[idx] = SurfaceLayoutLabeled(
+            id=layout.id,
+            tags=layout.tags,
+            size=layout.size,
+            label=auto_label
+        )
+
+    return labeled
 
 
 async def execute_stream(args: argparse.Namespace):
@@ -97,8 +130,22 @@ async def execute_stream(args: argparse.Namespace):
     """
     # discover and setup surface layouts
     print("🔍 Discovering surface layouts...")
-    labeled_surface_layouts = await setup_labeled_surface_layouts_cli(args.directory)
-    print(f"📋 Found {len(labeled_surface_layouts)} labeled surface layouts: {list(labeled_surface_layouts.keys())}")
+    layouts = discover_all_surface_layouts(args.directory)
+
+    if not layouts:
+        print("❌ No surface layouts found. Please generate at least one surface layout first.")
+        return
+
+    if args.auto_label_surface:
+        print("🤖 Auto-labeling surface layouts...")
+        labeled_surface_layouts = await auto_label_surface_layouts(layouts)
+        print(f"📋 Auto-labeled {len(labeled_surface_layouts)} surface layouts:")
+        for idx, layout in labeled_surface_layouts.items():
+            print(f"  [{idx}] {layout.label} -> {layout.id}")
+    else:
+        labeled_surface_layouts = await setup_labeled_surface_layouts_cli(args.directory)
+        print(f"📋 Found {len(labeled_surface_layouts)} labeled surface layouts: {list(labeled_surface_layouts.keys())}")
+
     if len(labeled_surface_layouts) == 0:
         print("❌ No labeled surface layouts found. Please generate or label at least one surface layout first.")
         return
