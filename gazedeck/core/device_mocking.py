@@ -26,6 +26,13 @@ from typing import Dict, Optional, Iterable
 from pynput import mouse
 from pynput.mouse import Button
 
+# Mouse button mapping for multiple devices
+MOUSE_BUTTONS = {
+    0: Button.left,
+    1: Button.right,
+    2: Button.middle  # mousewheel click
+}
+
 from gazedeck.core.websocket_server import broadcast_nowait
 from gazedeck.core.surface_layout_labeling import SurfaceLayoutLabeled
 
@@ -38,7 +45,7 @@ class MockTracker:
     to all registered surfaces at configurable frequency.
     """
 
-    def __init__(self, noise_level: float = 20.0, device_label: str = "mock_tracker", frequency: float = 200.0):
+    def __init__(self, noise_level: float = 20.0, device_label: str = "mock_tracker", frequency: float = 200.0, device_index: int = 0):
         """
         Initialize the mock tracker.
 
@@ -46,10 +53,13 @@ class MockTracker:
             noise_level: Maximum random noise in pixels (±noise_level)
             device_label: Label for this mock device
             frequency: Tracking frequency in Hz (default: 200.0)
+            device_index: Index of this device (0=left, 1=right, 2=middle mouse button)
         """
         self.noise_level = noise_level
         self.frequency = frequency
         self.sleep_interval = 1.0 / frequency if frequency > 0 else 0.005
+        self.device_index = device_index
+        self.mouse_button = MOUSE_BUTTONS.get(device_index, Button.left)
         self.current_position = (0.0, 0.0)
         self.surfaces: Dict[str, SurfaceLayoutLabeled] = {}
         self.device_label = device_label
@@ -93,10 +103,11 @@ class MockTracker:
             button: Mouse button pressed
             pressed: True if pressed, False if released
         """
-        if button == Button.left and pressed:
+        if button == self.mouse_button and pressed:
             with self._position_lock:
                 self.current_position = (float(x), float(y))
-                print(f"🖱️ Mock tracker: Position updated to ({x:.1f}, {y:.1f})")
+                button_name = {Button.left: "left", Button.right: "right", Button.middle: "middle"}.get(button, "unknown")
+                print(f"🖱️ Mock tracker {self.device_index} ({self.device_label}): Position updated to ({x:.1f}, {y:.1f}) via {button_name} click")
 
     async def start_tracking(self) -> None:
         """
@@ -114,7 +125,8 @@ class MockTracker:
         self._mouse_listener = mouse.Listener(on_click=self._on_mouse_click)
         self._mouse_listener.start()
 
-        print("🎯 Mock tracker started - click left mouse button to set gaze position")
+        button_name = {Button.left: "left", Button.right: "right", Button.middle: "middle"}.get(self.mouse_button, "unknown")
+        print(f"🎯 Mock tracker {self.device_index} ({self.device_label}) started - click {button_name} mouse button to set gaze position")
         print(f"📊 Tracking {len(self.surfaces)} surfaces at {self.frequency} Hz with ±{self.noise_level}px noise")
 
         # Start the tracking loop
@@ -212,32 +224,34 @@ class MockTracker:
         broadcast_nowait(json.dumps(message))
 
 
-# Global instance for easy access
-_mock_tracker: Optional[MockTracker] = None
+# Global instances for multiple trackers
+_mock_trackers: Dict[int, MockTracker] = {}
 
 
-def get_mock_tracker(noise_level: float = 20.0, device_label: str = "mock_tracker", frequency: float = 200.0) -> MockTracker:
+def get_mock_tracker(noise_level: float = 20.0, device_label: str = "mock_tracker", frequency: float = 200.0, device_index: int = 0) -> MockTracker:
     """
-    Get or create the global mock tracker instance.
+    Get or create a mock tracker instance for the specified device index.
 
     Args:
         noise_level: Maximum random noise in pixels (±noise_level)
         device_label: Label for this mock device
         frequency: Tracking frequency in Hz (default: 200.0)
+        device_index: Index of this device (0=left, 1=right, 2=middle mouse button)
 
     Returns:
         MockTracker instance
     """
-    global _mock_tracker
-    if _mock_tracker is None:
-        _mock_tracker = MockTracker(noise_level, device_label, frequency)
-    return _mock_tracker
+    global _mock_trackers
+    if device_index not in _mock_trackers:
+        _mock_trackers[device_index] = MockTracker(noise_level, device_label, frequency, device_index)
+    return _mock_trackers[device_index]
 
 
 async def start_mock_tracking(surfaces: Dict[str, SurfaceLayoutLabeled] | Iterable[SurfaceLayoutLabeled],
                             noise_level: float = 20.0,
                             device_label: str = "mock_tracker",
-                            frequency: float = 200.0) -> MockTracker:
+                            frequency: float = 200.0,
+                            device_index: int = 0) -> MockTracker:
     """
     Convenience function to start mock tracking for given surfaces.
 
@@ -246,11 +260,12 @@ async def start_mock_tracking(surfaces: Dict[str, SurfaceLayoutLabeled] | Iterab
         noise_level: Maximum random noise in pixels (±noise_level)
         device_label: Label for this mock device
         frequency: Tracking frequency in Hz (default: 200.0)
+        device_index: Index of this device (0=left, 1=right, 2=middle mouse button)
 
     Returns:
         MockTracker instance (already started)
     """
-    tracker = get_mock_tracker(noise_level, device_label, frequency)
+    tracker = get_mock_tracker(noise_level, device_label, frequency, device_index)
 
     # Add all surfaces - handle both dict and iterable
     if isinstance(surfaces, dict):
@@ -266,11 +281,31 @@ async def start_mock_tracking(surfaces: Dict[str, SurfaceLayoutLabeled] | Iterab
     return tracker
 
 
-async def stop_mock_tracking() -> None:
+async def stop_mock_tracking(device_index: Optional[int] = None) -> None:
     """
-    Convenience function to stop global mock tracking.
+    Convenience function to stop mock tracking.
+
+    Args:
+        device_index: Index of specific device to stop, or None to stop all
     """
-    global _mock_tracker
-    if _mock_tracker:
-        await _mock_tracker.stop_tracking()
-        _mock_tracker = None
+    global _mock_trackers
+    if device_index is not None:
+        if device_index in _mock_trackers:
+            await _mock_trackers[device_index].stop_tracking()
+            del _mock_trackers[device_index]
+    else:
+        # Stop all trackers
+        for tracker in list(_mock_trackers.values()):
+            await tracker.stop_tracking()
+        _mock_trackers.clear()
+
+
+def get_active_mock_devices() -> list[int]:
+    """
+    Get list of active mock device indices.
+
+    Returns:
+        List of device indices that are currently active
+    """
+    global _mock_trackers
+    return list(_mock_trackers.keys())

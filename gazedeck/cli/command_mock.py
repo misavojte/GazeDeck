@@ -13,7 +13,7 @@ from gazedeck.cli.setup_labeled_surface_layouts import setup_labeled_surface_lay
 from gazedeck.core.surface_layout_labeling import SurfaceLayoutLabeled
 from gazedeck.core.surface_layout_discovery import discover_all_surface_layouts, SurfaceLayout
 from gazedeck.core.websocket_server import start_ws_server, stop_ws_server, broadcast_nowait
-from gazedeck.core.device_mocking import start_mock_tracking, stop_mock_tracking
+from gazedeck.core.device_mocking import start_mock_tracking, stop_mock_tracking, get_active_mock_devices
 
 
 @dataclass(frozen=True)
@@ -31,61 +31,70 @@ class MockLabeledDevice:
         return self.label
 
 
-async def setup_mock_device_cli() -> Dict[int, MockLabeledDevice]:
+async def setup_mock_devices_cli(num_devices: int = 1) -> Dict[int, MockLabeledDevice]:
     """
-    Present a mock device for labeling using the same interface as real devices.
+    Present mock devices for labeling using the same interface as real devices.
+
+    Args:
+        num_devices: Number of mock devices to create (1-3)
     """
-    print("🎭 Setting up mock device...")
+    print(f"🎭 Setting up {num_devices} mock device{'s' if num_devices > 1 else ''}...")
 
-    # Create a mock device description
-    mock_device_description = "Mock Tracker Device (Cursor-based) | IP: 127.0.0.1 | Battery: 100% | Sensors: ✓"
+    labeled_devices = {}
+    button_names = ["left", "right", "middle"]
 
-    def _prompt() -> str:
-        try:
-            import sys
+    for device_idx in range(num_devices):
+        # Create a mock device description
+        button_name = button_names[device_idx]
+        mock_device_description = f"Mock Tracker Device {device_idx} ({button_name} click) | IP: 127.0.0.1 | Battery: 100% | Sensors: ✓"
 
-            # Check if we have a TTY (interactive terminal)
-            if not sys.stdin.isatty():
-                print("⚠️  Non-interactive terminal detected, auto-labeling as 'mock_tracker'...")
-                return "mock_tracker"
-
-            # Simple input with basic timeout handling
+        def _prompt_for_device(idx: int, desc: str) -> str:
             try:
-                result = input(f"Label for mock device [0] [{mock_device_description}] (blank=skip): ")
-                return result or "mock_tracker"  # Default to mock_tracker if blank
-            except EOFError:
-                print("\n❌ EOF detected, using default label 'mock_tracker'...")
-                return "mock_tracker"
-            except KeyboardInterrupt:
-                print("\n❌ Keyboard interrupt, using default label 'mock_tracker'...")
-                return "mock_tracker"
+                import sys
 
-        except Exception as e:
-            print(f"\n❌ Error getting input: {e}, using default label 'mock_tracker'...")
-            return "mock_tracker"
+                # Check if we have a TTY (interactive terminal)
+                if not sys.stdin.isatty():
+                    return f"mock_tracker_{idx}"
 
-    try:
-        label = await asyncio.wait_for(asyncio.to_thread(_prompt), timeout=30.0)
-    except asyncio.TimeoutError:
-        print("\n⏰ Timeout, using default label 'mock_tracker'...")
-        label = "mock_tracker"
+                # Simple input with basic timeout handling
+                try:
+                    result = input(f"Label for mock device [{idx}] [{desc}] (blank=skip): ")
+                    return result or f"mock_tracker_{idx}"  # Default label
+                except EOFError:
+                    print(f"\n❌ EOF detected for device {idx}, using default label 'mock_tracker_{idx}'...")
+                    return f"mock_tracker_{idx}"
+                except KeyboardInterrupt:
+                    print(f"\n❌ Keyboard interrupt for device {idx}, using default label 'mock_tracker_{idx}'...")
+                    return f"mock_tracker_{idx}"
 
-    if not label.strip():
-        label = "mock_tracker"
+            except Exception as e:
+                print(f"\n❌ Error getting input for device {idx}: {e}, using default label 'mock_tracker_{idx}'...")
+                return f"mock_tracker_{idx}"
 
-    # Create the mock labeled device
-    mock_device = MockLabeledDevice(
-        label=label.strip(),
-        name="Mock Cursor Tracker",
-        ip="127.0.0.1"
-    )
+        try:
+            label = await asyncio.wait_for(asyncio.to_thread(_prompt_for_device, device_idx, mock_device_description), timeout=30.0)
+        except asyncio.TimeoutError:
+            print(f"\n⏰ Timeout for device {device_idx}, using default label 'mock_tracker_{device_idx}'...")
+            label = f"mock_tracker_{device_idx}"
 
-    labeled = {0: mock_device}
+        if not label.strip():
+            label = f"mock_tracker_{device_idx}"
 
-    print("Labeled mock device:")
-    print(f"  [0] {mock_device.label} -> {mock_device.name} ({mock_device.ip})")
+        # Create the mock labeled device
+        mock_device = MockLabeledDevice(
+            label=label.strip(),
+            name=f"Mock Cursor Tracker {device_idx}",
+            ip="127.0.0.1"
+        )
 
-    return labeled
+        labeled_devices[device_idx] = mock_device
+
+    print("Labeled mock devices:")
+    for idx, device in labeled_devices.items():
+        button_name = button_names[idx]
+        print(f"  [{idx}] {device.label} -> {device.name} ({device.ip}) - {button_name} click")
+
+    return labeled_devices
 
 
 def add_mock_parser(subparsers) -> argparse.ArgumentParser:
@@ -119,6 +128,15 @@ def add_mock_parser(subparsers) -> argparse.ArgumentParser:
         type=float,
         default=200.0,
         help="Tracking frequency in Hz (default: 200.0).",
+    )
+
+    # Number of devices argument
+    mock_parser.add_argument(
+        "--devices",
+        type=int,
+        default=1,
+        choices=[1, 2, 3],
+        help="Number of mock devices to create (1-3, default: 1). Each device uses a different mouse button.",
     )
 
     # Auto-label surface layouts
@@ -176,11 +194,10 @@ async def execute_mock(args: argparse.Namespace):
         print("❌ No labeled surface layouts found. Please generate or label at least one surface layout first.")
         return
 
-    # Setup mock device
-    print("🎭 Setting up mock device...")
-    mock_devices = await setup_mock_device_cli()
+    # Setup mock devices
+    mock_devices = await setup_mock_devices_cli(num_devices=args.devices)
     if len(mock_devices) == 0:
-        print("❌ No mock device labeled.")
+        print("❌ No mock devices labeled.")
         return
 
     # Start WebSocket server
@@ -188,15 +205,27 @@ async def execute_mock(args: argparse.Namespace):
     server, broadcaster_task = await start_ws_server(host="localhost", port=8765)
 
     try:
-        # Start mock tracking
-        print(f"🎯 Starting mock tracking at {args.frequency} Hz with ±{args.noise_level}px noise...")
-        # Get the device label from the mock devices
-        device_label = list(mock_devices.values())[0].label
-        tracker = await start_mock_tracking(labeled_surface_layouts.values(), noise_level=args.noise_level, device_label=device_label, frequency=args.frequency)
+        # Start mock tracking for all devices
+        print(f"🎯 Starting mock tracking for {len(mock_devices)} device{'s' if len(mock_devices) > 1 else ''} at {args.frequency} Hz with ±{args.noise_level}px noise...")
 
+        trackers = []
+        for device_idx, mock_device in mock_devices.items():
+            tracker = await start_mock_tracking(
+                labeled_surface_layouts.values(),
+                noise_level=args.noise_level,
+                device_label=mock_device.label,
+                frequency=args.frequency,
+                device_index=device_idx
+            )
+            trackers.append(tracker)
+
+        button_names = ["left", "right", "middle"]
         print("Mock stream started!")
-        print("🖱️  Click left mouse button to update gaze position")
-        print(f"📊 Emitting at {args.frequency} Hz to all surfaces with random noise")
+        for i, device in enumerate(mock_devices.values()):
+            button_name = button_names[i]
+            print(f"🖱️  Device {i} ({device.label}): Click {button_name} mouse button to update gaze position")
+
+        print(f"📊 Emitting at {args.frequency} Hz from {len(mock_devices)} device{'s' if len(mock_devices) > 1 else ''} to all surfaces with random noise")
         print("Press Ctrl+C to stop")
 
         # Keep running until interrupted
@@ -212,6 +241,6 @@ async def execute_mock(args: argparse.Namespace):
         traceback.print_exc()
     finally:
         print("🧹 Cleaning up...")
-        await stop_mock_tracking()
+        await stop_mock_tracking()  # Stop all trackers
         await stop_ws_server(server, broadcaster_task)
         print("The mock streaming task has stopped")
