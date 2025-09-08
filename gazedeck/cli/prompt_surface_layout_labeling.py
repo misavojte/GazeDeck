@@ -24,7 +24,15 @@ async def ask_label_cli(idx: int, layout: SurfaceLayout) -> Optional[str]:
 
     def _prompt() -> str:
         try:
-            return input(f"Label for layout {idx} [{description}] (blank=skip): ")
+            result = input(f"Label for layout {idx} [{description}] (integer ID, blank=skip): ")
+            if result.strip():
+                # Validate that the label is an integer
+                try:
+                    int(result.strip())
+                except ValueError:
+                    print(f"❌ Label must be a valid integer, got: '{result.strip()}'. Please try again.")
+                    return _prompt()  # Recursive retry
+            return result
         except EOFError:
             return ""  # skip on EOF
     return await asyncio.to_thread(_prompt)

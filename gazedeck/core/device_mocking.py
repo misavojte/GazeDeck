@@ -217,15 +217,31 @@ class MockTracker:
                 # Output null when gaze is not on surface (matches real stream behavior)
                 surface_gaze[surface_label] = None
 
-        # Create message in same format as real gaze data
-        message = {
-            "timestamp": timestamp.isoformat(),
-            "device": self.device_label,
-            "surface_gaze": surface_gaze
-        }
+        # Broadcast binary messages - one per surface (not nested JSON)
+        from .websocket_server import broadcast_gaze_data
 
-        # Broadcast via WebSocket
-        broadcast_nowait(json.dumps(message))
+        # Use labels directly as integer IDs (user provides integer labels)
+        try:
+            device_id = int(self.device_label)
+        except ValueError:
+            raise ValueError(f"Device label must be a valid integer, got: '{self.device_label}'")
+
+        # Send one binary message per surface
+        for surface_label, surface_result in surface_gaze.items():
+            try:
+                surface_id = int(surface_label)
+            except ValueError:
+                raise ValueError(f"Surface label must be a valid integer, got: '{surface_label}'")
+
+            if surface_result is None:
+                # Surface not detected or gaze not on surface - use NaN
+                x, y = float('nan'), float('nan')
+            else:
+                # Valid surface detection with normalized coordinates
+                x, y = surface_result["x"], surface_result["y"]
+
+            # Binary serialization - massively more efficient than JSON
+            broadcast_gaze_data(device_id, surface_id, x, y, timestamp)
 
     def config_matches(self, noise_level, device_label, frequency, device_index) -> bool:
         return (self.noise_level == noise_level and

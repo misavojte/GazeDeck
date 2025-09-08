@@ -184,53 +184,45 @@ Connect to the WebSocket server at `ws://localhost:8765` (default port).
 
 ### Data Format
 
-Gaze data is streamed as JSON objects with this structure:
+Gaze data is streamed as binary ArrayBuffer messages with this structure:
 
-```json
-{
-  "timestamp": "2024-01-15T10:30:45.123456",
-  "device": "EyeTracker_001",
-  "surface_gaze": {
-    "my_screen": {
-      "x": 0.734,
-      "y": 0.512,
-      "is_on_surface": true
-    },
-    "secondary_display": {
-      "x": 0.245,
-      "y": 0.789,
-      "is_on_surface": true
-    }
-  }
-}
-```
+**Message format**: `[device_id:int32, surface_id:int32, x:float32, y:float32, timestamp:float64]`
+
+- **Size**: 24 bytes per message
+- **Byte order**: Little-endian
+- **Invalid data**: NaN values for x/y when surface detection fails
 
 #### Field Descriptions
 
-- **`timestamp`**: ISO format timestamp of when the gaze data was captured
-- **`device`**: Label of the device that captured the gaze data
-- **`surface_gaze`**: Object containing gaze data for each detected surface
-  - **`<surface_id>`**: Surface identifier (matches surface layout ID)
-    - **`x`**: Normalized X coordinate (0.0 to 1.0, left to right)
-    - **`y`**: Normalized Y coordinate (0.0 to 1.0, top to bottom)
-    - **`is_on_surface`**: Boolean indicating if gaze is on the surface
+- **`device_id`**: Integer device identifier
+- **`surface_id`**: Integer surface identifier
+- **`x`**: Normalized X coordinate (0.0 to 1.0, left to right), or NaN if invalid
+- **`y`**: Normalized Y coordinate (0.0 to 1.0, top to bottom), or NaN if invalid
+- **`timestamp`**: Unix timestamp in seconds (float64)
 
 ### Example Client Implementation
 
 ```javascript
 const ws = new WebSocket('ws://localhost:8765');
+ws.binaryType = 'arraybuffer';
 
 ws.onmessage = (event) => {
-    const data = JSON.parse(event.data);
+    const buffer = event.data;
+    const view = new DataView(buffer);
 
-    // Process gaze data for each surface
-    Object.entries(data.surface_gaze).forEach(([surfaceId, gaze]) => {
-        if (gaze.is_on_surface) {
-            const screenX = gaze.x * screenWidth;
-            const screenY = gaze.y * screenHeight;
-            updateGazeIndicator(surfaceId, screenX, screenY);
-        }
-    });
+    // Parse binary message
+    const deviceId = view.getInt32(0, true);     // device_id
+    const surfaceId = view.getInt32(4, true);    // surface_id
+    const x = view.getFloat32(8, true);          // x coordinate
+    const y = view.getFloat32(12, true);         // y coordinate
+    const timestamp = view.getFloat64(16, true); // timestamp
+
+    // Check if data is valid
+    if (!isNaN(x) && !isNaN(y)) {
+        const screenX = x * screenWidth;
+        const screenY = y * screenHeight;
+        updateGazeIndicator(deviceId, surfaceId, screenX, screenY);
+    }
 };
 ```
 
@@ -315,13 +307,20 @@ for device_label, device in devices.items():
 #### WebSocket Server
 
 ```python
-from gazedeck.core.websocket_server import start_ws_server, broadcast_nowait
+from gazedeck.core.websocket_server import start_ws_server, broadcast_gaze_data
+from datetime import datetime
 
 # Start server
 server, broadcaster_task = await start_ws_server(host="localhost", port=8765)
 
-# Broadcast data to all connected clients
-broadcast_nowait('{"type": "gaze_data", "x": 0.5, "y": 0.3}')
+# Broadcast gaze data to all connected clients
+broadcast_gaze_data(
+    device_id=1,
+    surface_id=2,
+    x=0.5,
+    y=0.3,
+    timestamp=datetime.now()
+)
 ```
 
 ## Best Practices
@@ -369,8 +368,9 @@ broadcast_nowait('{"type": "gaze_data", "x": 0.5, "y": 0.3}')
 
 #### "Gaze data coordinates are inverted"
 - Pupil Labs uses different coordinate systems depending on camera orientation
-- Check the `is_on_surface` flag to validate coordinate data
+- Check for NaN values in x/y coordinates to detect invalid data
 - Adjust coordinate transformation in your client application
+- Coordinates outside 0.0-1.0 range indicate gaze outside surface bounds
 
 ### Performance Tuning
 
@@ -386,6 +386,6 @@ GazeDeck consists of several key components:
 - **Device Discovery**: Automatically finds Pupil Labs devices on the network
 - **Surface Layout Generation**: Creates AprilTag marker configurations
 - **Gaze Mapping**: Maps 3D gaze vectors to 2D surface coordinates
-- **WebSocket Broadcasting**: High-throughput data distribution to clients
+- **WebSocket Broadcasting**: Binary message streaming to clients
 - **Calibration Integration**: Uses Pupil Labs calibration data for accuracy
 

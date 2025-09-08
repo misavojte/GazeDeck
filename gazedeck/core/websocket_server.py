@@ -16,9 +16,13 @@ from __future__ import annotations
 
 import asyncio
 from typing import Set, Tuple
+from datetime import datetime
 import websockets
 from websockets.server import WebSocketServerProtocol
 import contextlib
+
+# Import binary message serialization
+from .binary_messages import serialize_gaze_message
 
 # Tune these to your needs
 CLIENT_QUEUE_MAX = 256       # per-client buffer; drop beyond this
@@ -108,6 +112,21 @@ def broadcast_nowait(msg: str | bytes) -> None:
     except asyncio.QueueFull:
         # global pressure → drop newest; consider metrics if needed
         pass
+
+
+def broadcast_gaze_data(device_id: int, surface_id: int, x: float, y: float, timestamp: datetime) -> None:
+    """
+    High-performance gaze data broadcast using binary serialization.
+
+    Args:
+        device_id: Stable integer device identifier
+        surface_id: Stable integer surface identifier
+        x: X coordinate (0.0-1.0 normalized on surface, can be higher or lower if the gaze is not on the surface, NaN if invalid)
+        y: Y coordinate (0.0-1.0 normalized on surface, can be higher or lower if the gaze is not on the surface, NaN if invalid)
+        timestamp: Gaze timestamp
+    """
+    message = serialize_gaze_message(device_id, surface_id, x, y, timestamp)
+    broadcast_nowait(message)
 
 async def stop_ws_server(server: websockets.server.Serve, btask: asyncio.Task) -> None:
     """Graceful shutdown."""

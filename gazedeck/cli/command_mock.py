@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from gazedeck.cli.setup_labeled_surface_layouts import setup_labeled_surface_layouts_cli
 from gazedeck.core.surface_layout_labeling import SurfaceLayoutLabeled
 from gazedeck.core.surface_layout_discovery import discover_all_surface_layouts, SurfaceLayout
-from gazedeck.core.websocket_server import start_ws_server, stop_ws_server, broadcast_nowait
+from gazedeck.core.websocket_server import start_ws_server, stop_ws_server, broadcast_gaze_data
 from gazedeck.core.device_mocking import start_mock_tracking, stop_mock_tracking, get_active_mock_devices
 
 
@@ -54,31 +54,39 @@ async def setup_mock_devices_cli(num_devices: int = 1) -> Dict[int, MockLabeledD
 
                 # Check if we have a TTY (interactive terminal)
                 if not sys.stdin.isatty():
-                    return f"mock_tracker_{idx}"
+                    return str(idx)  # Use simple integer ID for non-interactive
 
                 # Simple input with basic timeout handling
                 try:
-                    result = input(f"Label for mock device [{idx}] [{desc}] (blank=skip): ")
-                    return result or f"mock_tracker_{idx}"  # Default label
+                    result = input(f"Label for mock device [{idx}] [{desc}] (integer ID, blank=skip): ")
+                    if result.strip():
+                        # Validate that the label is an integer
+                        try:
+                            int(result.strip())
+                            return result.strip()
+                        except ValueError:
+                            print(f"❌ Label must be a valid integer, got: '{result.strip()}'. Please try again.")
+                            return _prompt_for_device(idx, desc)  # Recursive retry
+                    return str(idx)  # Use index as default integer ID
                 except EOFError:
-                    print(f"\n❌ EOF detected for device {idx}, using default label 'mock_tracker_{idx}'...")
-                    return f"mock_tracker_{idx}"
+                    print(f"\n❌ EOF detected for device {idx}, using default ID '{idx}'...")
+                    return str(idx)
                 except KeyboardInterrupt:
-                    print(f"\n❌ Keyboard interrupt for device {idx}, using default label 'mock_tracker_{idx}'...")
-                    return f"mock_tracker_{idx}"
+                    print(f"\n❌ Keyboard interrupt for device {idx}, using default ID '{idx}'...")
+                    return str(idx)
 
             except Exception as e:
-                print(f"\n❌ Error getting input for device {idx}: {e}, using default label 'mock_tracker_{idx}'...")
-                return f"mock_tracker_{idx}"
+                print(f"\n❌ Error getting input for device {idx}: {e}, using default ID '{idx}'...")
+                return str(idx)
 
         try:
             label = await asyncio.wait_for(asyncio.to_thread(_prompt_for_device, device_idx, mock_device_description), timeout=30.0)
         except asyncio.TimeoutError:
-            print(f"\n⏰ Timeout for device {device_idx}, using default label 'mock_tracker_{device_idx}'...")
-            label = f"mock_tracker_{device_idx}"
+            print(f"\n⏰ Timeout for device {device_idx}, using default ID '{device_idx}'...")
+            label = str(device_idx)
 
         if not label.strip():
-            label = f"mock_tracker_{device_idx}"
+            label = str(device_idx)
 
         # Create the mock labeled device
         mock_device = MockLabeledDevice(
