@@ -48,5 +48,4 @@ def discover_all_surface_layouts(directory: str) -> Dict[int, SurfaceLayout]:
                 found_layouts[layout_count] = load_surface_layout(file_path)
                 layout_count += 1
     
-    print(f"Discovered {len(found_layouts)} surface layouts in directory {directory} (including subdirectories)")
     return found_layouts

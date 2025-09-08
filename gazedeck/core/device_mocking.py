@@ -5,12 +5,14 @@ Mock gaze tracker that simulates cursor position tracking at 200 Hz.
 
 Design:
 - Tracks mouse cursor position with random noise (±20px)
-- Emits normalized coordinates (0.0-1.0) to all labeled surfaces at 200 Hz (5ms intervals)
+- Emits normalized coordinates to all labeled surfaces at 200 Hz (5ms intervals)
 - Position updates are triggered by left mouse clicks
 - Integrates with existing WebSocket broadcasting system
 - Thread-safe and runs asynchronously
 
 Coordinates: Normalized to surface bounds (0.0 = top/left edge, 1.0 = bottom/right edge)
+- Values can be outside 0.0-1.0 range when gaze is outside surface bounds
+- Always includes coordinate data regardless of surface bounds
 Requires: pynput (pip install pynput)
 """
 
@@ -198,25 +200,21 @@ class MockTracker:
             gaze_x = base_x + noise_x
             gaze_y = base_y + noise_y
 
-            # Check if gaze is within surface bounds
+            # Always normalize coordinates (can be outside 0-1 range)
+            normalized_x = gaze_x / surface.size[0] if surface.size[0] > 0 else 0.0
+            normalized_y = gaze_y / surface.size[1] if surface.size[1] > 0 else 0.0
+
+            # Check if gaze is within surface bounds (but don't exclude data)
             is_on_surface = (
                 0 <= gaze_x <= surface.size[0] and
                 0 <= gaze_y <= surface.size[1]
             )
 
-            if is_on_surface:
-                # Normalize coordinates to 0.0-1.0 range
-                normalized_x = gaze_x / surface.size[0] if surface.size[0] > 0 else 0.0
-                normalized_y = gaze_y / surface.size[1] if surface.size[1] > 0 else 0.0
-
-                surface_gaze[surface_emission_id] = {
-                    "x": normalized_x,
-                    "y": normalized_y,
-                    "is_on_surface": True
-                }
-            else:
-                # Output null when gaze is not on surface (matches real stream behavior)
-                surface_gaze[surface_emission_id] = None
+            surface_gaze[surface_emission_id] = {
+                "x": normalized_x,
+                "y": normalized_y,
+                "is_on_surface": is_on_surface
+            }
 
         # Broadcast binary messages - one per surface (not nested JSON)
         from .websocket_server import broadcast_gaze_data
@@ -229,12 +227,8 @@ class MockTracker:
             # surface_emission_id is already an integer, no conversion needed
             surface_id = surface_emission_id
 
-            if surface_result is None:
-                # Surface not detected or gaze not on surface - use NaN
-                x, y = float('nan'), float('nan')
-            else:
-                # Valid surface detection with normalized coordinates
-                x, y = surface_result["x"], surface_result["y"]
+            # Always include coordinates (can be outside 0-1 range)
+            x, y = surface_result["x"], surface_result["y"]
 
             # Binary serialization - massively more efficient than JSON
             broadcast_gaze_data(device_id, surface_id, x, y, timestamp)
