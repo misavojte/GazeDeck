@@ -147,11 +147,15 @@ class MockTracker:
                 await self._task
             except asyncio.CancelledError:
                 pass
+            self._task = None  # Clear reference
 
         if self._mouse_listener:
             self._mouse_listener.stop()
+            self._mouse_listener = None  # Clear reference
 
-        print("🛑 Mock tracker stopped")
+        self.surfaces.clear()  # Clear surface references
+
+        print("🛑 Mock tracker stopped and cleaned up")
 
     async def _tracking_loop(self) -> None:
         """
@@ -223,6 +227,12 @@ class MockTracker:
         # Broadcast via WebSocket
         broadcast_nowait(json.dumps(message))
 
+    def config_matches(self, noise_level, device_label, frequency, device_index) -> bool:
+        return (self.noise_level == noise_level and
+                self.device_label == device_label and
+                self.frequency == frequency and
+                self.device_index == device_index)
+
 
 # Global instances for multiple trackers
 _mock_trackers: Dict[int, MockTracker] = {}
@@ -242,8 +252,17 @@ def get_mock_tracker(noise_level: float = 20.0, device_label: str = "mock_tracke
         MockTracker instance
     """
     global _mock_trackers
-    if device_index not in _mock_trackers:
-        _mock_trackers[device_index] = MockTracker(noise_level, device_label, frequency, device_index)
+    if device_index in _mock_trackers:
+        existing = _mock_trackers[device_index]
+        if existing.config_matches(noise_level, device_label, frequency, device_index):
+            return existing
+        else:
+            # Stop and remove old tracker with different config
+            asyncio.run(existing.stop_tracking()) # Use asyncio.run to await cancellation
+            del _mock_trackers[device_index]
+
+    # Create new tracker with correct config
+    _mock_trackers[device_index] = MockTracker(noise_level, device_label, frequency, device_index)
     return _mock_trackers[device_index]
 
 
