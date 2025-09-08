@@ -8,6 +8,7 @@ import sys
 import os
 import argparse
 import asyncio
+import signal
 
 try:
     from colorama import init, Fore, Back, Style
@@ -130,6 +131,9 @@ def execute_command(command_line):
     except SystemExit:
         # argparse uses SystemExit for --help, catch it to continue
         pass
+    except KeyboardInterrupt:
+        print("\n\nCommand interrupted by user (Ctrl+C)")
+        print("Returning to console...")
     except Exception as e:
         print(f"Error: {e}")
 
@@ -163,8 +167,9 @@ def main():
                 execute_command(user_input)
 
         except KeyboardInterrupt:
-            print("\nGoodbye!")
-            break
+            # Don't break - just print a newline and continue
+            print("\n")
+            continue
         except EOFError:
             print("\nGoodbye!")
             break
