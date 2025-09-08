@@ -10,7 +10,16 @@ from gazedeck.core.surface_layout_discovery import SurfaceLayout
 
 @dataclass(frozen=True)
 class SurfaceLayoutLabeled(SurfaceLayout):
+    """
+    Surface layout with user-provided label and discovery index.
+
+    Notes:
+        - Inherits id (str), tags, and size from SurfaceLayout (the actual surface identifier from YAML)
+        - Adds label (str): User-provided descriptive label
+        - Adds emission_id (int): Integer ID used for WebSocket transmission (avoids runtime int conversion)
+    """
     label: str
+    emission_id: int  # ID used for WebSocket transmission
 
 async def label_surface_layouts(
     layouts: Dict[int, SurfaceLayout],
@@ -36,7 +45,8 @@ async def label_surface_layouts(
                 id=layout.id,
                 tags=layout.tags,
                 size=layout.size,
-                label=label
+                label=label,
+                emission_id=idx  # Use discovery index as emission ID (temporarily)
             )
 
     return labeled

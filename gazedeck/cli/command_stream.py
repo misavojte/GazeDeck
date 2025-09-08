@@ -118,7 +118,8 @@ async def auto_label_surface_layouts(layouts: Dict[int, SurfaceLayout]) -> Dict[
             id=layout.id,
             tags=layout.tags,
             size=layout.size,
-            label=auto_label
+            label=auto_label,
+            emission_id=idx
         )
 
     return labeled
@@ -205,22 +206,16 @@ async def stream_gaze_mapped_data_to_ws(labeled_device: LabeledDevice, labeled_s
     - NaN for invalid data: mathematical correctness with minimal overhead
     """
     try:
-        print(f"🎯 Starting gaze streaming for device: {labeled_device.label}")
+        print(f"🎯 Starting gaze streaming for device: {labeled_device.emission_id} {labeled_device.label}")
         queue_result = await stream_gaze_mapped_data(labeled_device, labeled_surface_layouts, apriltag_params, gaze_filter_alpha)
-        print(f"📡 Queue created for device {labeled_device.label}, waiting for gaze data...")
+        print(f"📡 Queue created for device {labeled_device.emission_id} {labeled_device.label}, waiting for gaze data...")
 
-        # Use labels directly as integer IDs (user provides integer labels)
-        try:
-            device_id = int(labeled_device.label)
-        except ValueError:
-            raise ValueError(f"Device label must be a valid integer, got: '{labeled_device.label}'")
+        # Use emission_id for WebSocket transmission (no runtime int conversion needed)
+        device_id = labeled_device.emission_id
 
         surface_id_map = {}
-        for surface_label in labeled_surface_layouts.keys():
-            try:
-                surface_id_map[surface_label] = int(surface_label)
-            except ValueError:
-                raise ValueError(f"Surface label must be a valid integer, got: '{surface_label}'")
+        for surface_idx, surface_layout in labeled_surface_layouts.items():
+            surface_id_map[surface_layout.label] = surface_layout.emission_id
 
         message_count = 0
         while True:

@@ -61,7 +61,7 @@ class MockTracker:
         self.device_index = device_index
         self.mouse_button = MOUSE_BUTTONS.get(device_index, Button.left)
         self.current_position = (0.0, 0.0)
-        self.surfaces: Dict[str, SurfaceLayoutLabeled] = {}
+        self.surfaces: Dict[int, SurfaceLayoutLabeled] = {}
         self.device_label = device_label
         self._running = False
         self._task: Optional[asyncio.Task] = None
@@ -80,19 +80,20 @@ class MockTracker:
         Args:
             surface: Labeled surface layout to track
         """
-        self.surfaces[surface.label] = surface
-        print(f"📋 Mock tracker: Added surface '{surface.label}' ({surface.size[0]}x{surface.size[1]})")
+        self.surfaces[surface.emission_id] = surface
+        print(f"📋 Mock tracker: Added surface '{surface.emission_id} {surface.label}' ({surface.size[0]}x{surface.size[1]})")
 
-    def remove_surface(self, surface_label: str) -> None:
+    def remove_surface(self, surface_emission_id: int) -> None:
         """
         Remove a surface from tracking.
 
         Args:
-            surface_label: Label of surface to remove
+            surface_emission_id: Emission ID of surface to remove
         """
-        if surface_label in self.surfaces:
-            del self.surfaces[surface_label]
-            print(f"📋 Mock tracker: Removed surface '{surface_label}'")
+        if surface_emission_id in self.surfaces:
+            surface = self.surfaces[surface_emission_id]
+            del self.surfaces[surface_emission_id]
+            print(f"📋 Mock tracker: Removed surface '{surface_emission_id} {surface.label}'")
 
     def _on_mouse_click(self, x: float, y: float, button: Button, pressed: bool) -> None:
         """
@@ -188,7 +189,7 @@ class MockTracker:
 
         # Create surface gaze data with noise
         surface_gaze = {}
-        for surface_label, surface in self.surfaces.items():
+        for surface_emission_id, surface in self.surfaces.items():
             # Add random noise (±noise_level pixels)
             noise_x = random.uniform(-self.noise_level, self.noise_level)
             noise_y = random.uniform(-self.noise_level, self.noise_level)
@@ -208,30 +209,25 @@ class MockTracker:
                 normalized_x = gaze_x / surface.size[0] if surface.size[0] > 0 else 0.0
                 normalized_y = gaze_y / surface.size[1] if surface.size[1] > 0 else 0.0
 
-                surface_gaze[surface_label] = {
+                surface_gaze[surface_emission_id] = {
                     "x": normalized_x,
                     "y": normalized_y,
                     "is_on_surface": True
                 }
             else:
                 # Output null when gaze is not on surface (matches real stream behavior)
-                surface_gaze[surface_label] = None
+                surface_gaze[surface_emission_id] = None
 
         # Broadcast binary messages - one per surface (not nested JSON)
         from .websocket_server import broadcast_gaze_data
 
-        # Use labels directly as integer IDs (user provides integer labels)
-        try:
-            device_id = int(self.device_label)
-        except ValueError:
-            raise ValueError(f"Device label must be a valid integer, got: '{self.device_label}'")
+        # Use emission_id for WebSocket transmission (no runtime int conversion needed)
+        device_id = self.device_index  # device_index is already the emission_id equivalent for mock devices
 
         # Send one binary message per surface
-        for surface_label, surface_result in surface_gaze.items():
-            try:
-                surface_id = int(surface_label)
-            except ValueError:
-                raise ValueError(f"Surface label must be a valid integer, got: '{surface_label}'")
+        for surface_emission_id, surface_result in surface_gaze.items():
+            # surface_emission_id is already an integer, no conversion needed
+            surface_id = surface_emission_id
 
             if surface_result is None:
                 # Surface not detected or gaze not on surface - use NaN
@@ -282,7 +278,7 @@ def get_mock_tracker(noise_level: float = 20.0, device_label: str = "mock_tracke
     return _mock_trackers[device_index]
 
 
-async def start_mock_tracking(surfaces: Dict[str, SurfaceLayoutLabeled] | Iterable[SurfaceLayoutLabeled],
+async def start_mock_tracking(surfaces: Dict[int, SurfaceLayoutLabeled] | Iterable[SurfaceLayoutLabeled],
                             noise_level: float = 20.0,
                             device_label: str = "mock_tracker",
                             frequency: float = 200.0,
@@ -291,7 +287,7 @@ async def start_mock_tracking(surfaces: Dict[str, SurfaceLayoutLabeled] | Iterab
     Convenience function to start mock tracking for given surfaces.
 
     Args:
-        surfaces: Dictionary of surface_label -> SurfaceLayoutLabeled or iterable of SurfaceLayoutLabeled
+        surfaces: Dictionary of surface_emission_id -> SurfaceLayoutLabeled or iterable of SurfaceLayoutLabeled
         noise_level: Maximum random noise in pixels (±noise_level)
         device_label: Label for this mock device
         frequency: Tracking frequency in Hz (default: 200.0)

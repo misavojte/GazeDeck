@@ -54,35 +54,29 @@ async def setup_mock_devices_cli(num_devices: int = 1) -> Dict[int, MockLabeledD
 
                 # Check if we have a TTY (interactive terminal)
                 if not sys.stdin.isatty():
-                    return str(idx)  # Use simple integer ID for non-interactive
+                    return str(idx)  # Use simple label for non-interactive
 
                 # Simple input with basic timeout handling
                 try:
-                    result = input(f"Label for mock device [{idx}] [{desc}] (integer ID, blank=skip): ")
+                    result = input(f"Label for mock device [{idx}] [{desc}] (blank=skip): ")
                     if result.strip():
-                        # Validate that the label is an integer
-                        try:
-                            int(result.strip())
-                            return result.strip()
-                        except ValueError:
-                            print(f"❌ Label must be a valid integer, got: '{result.strip()}'. Please try again.")
-                            return _prompt_for_device(idx, desc)  # Recursive retry
-                    return str(idx)  # Use index as default integer ID
+                        return result.strip()
+                    return str(idx)  # Use index as default label
                 except EOFError:
-                    print(f"\n❌ EOF detected for device {idx}, using default ID '{idx}'...")
+                    print(f"\n❌ EOF detected for device {idx}, using default label '{idx}'...")
                     return str(idx)
                 except KeyboardInterrupt:
-                    print(f"\n❌ Keyboard interrupt for device {idx}, using default ID '{idx}'...")
+                    print(f"\n❌ Keyboard interrupt for device {idx}, using default label '{idx}'...")
                     return str(idx)
 
             except Exception as e:
-                print(f"\n❌ Error getting input for device {idx}: {e}, using default ID '{idx}'...")
+                print(f"\n❌ Error getting input for device {idx}: {e}, using default label '{idx}'...")
                 return str(idx)
 
         try:
             label = await asyncio.wait_for(asyncio.to_thread(_prompt_for_device, device_idx, mock_device_description), timeout=30.0)
         except asyncio.TimeoutError:
-            print(f"\n⏰ Timeout for device {device_idx}, using default ID '{device_idx}'...")
+            print(f"\n⏰ Timeout for device {device_idx}, using default label '{device_idx}'...")
             label = str(device_idx)
 
         if not label.strip():
@@ -170,7 +164,8 @@ async def auto_label_surface_layouts(layouts: Dict[int, SurfaceLayout]) -> Dict[
             id=layout.id,
             tags=layout.tags,
             size=layout.size,
-            label=auto_label
+            label=auto_label,
+            emission_id=idx
         )
 
     return labeled

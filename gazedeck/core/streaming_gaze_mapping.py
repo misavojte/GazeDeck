@@ -54,7 +54,7 @@ async def stream_gaze_mapped_data(labeled_device: LabeledDevice, surface_layouts
         enqueue_sensor_data(
             receive_video_frames(sensor_video_url, run_loop=restart_on_disconnect),
             queue_video,
-            f"Incoming video (device: {labeled_device.label})",
+            f"Incoming video (device: {labeled_device.emission_id} {labeled_device.label})",
         )
     )
 
@@ -63,7 +63,7 @@ async def stream_gaze_mapped_data(labeled_device: LabeledDevice, surface_layouts
         enqueue_sensor_data(
             receive_gaze_data(sensor_gaze_url, run_loop=restart_on_disconnect),
             queue_gaze,
-            f"Incoming gaze (device: {labeled_device.label})",
+            f"Incoming gaze (device: {labeled_device.emission_id} {labeled_device.label})",
         )
     )
 
@@ -72,7 +72,7 @@ async def stream_gaze_mapped_data(labeled_device: LabeledDevice, surface_layouts
         match_and_map_gaze(queue_video, queue_gaze, queue_result, labeled_device.camera_calibration, surface_layouts, apriltag_params, gaze_filter_alpha)
     )
     
-    print(f"✅ Gaze mapping task started for device {labeled_device.label}, returning queue")
+    print(f"✅ Gaze mapping task started for device {labeled_device.emission_id} {labeled_device.label}, returning queue")
     return queue_result
 
 async def match_and_map_gaze(queue_video: asyncio.Queue[VideoFrame], queue_gaze: asyncio.Queue[GazeData], output_queue: asyncio.Queue[GazeMappedResult], calibration: Calibration, surface_layouts: Dict[int, SurfaceLayoutLabeled], apriltag_params: Dict[str, Any], gaze_filter_alpha: float = 0.25) -> None:

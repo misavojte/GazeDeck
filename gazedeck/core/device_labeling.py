@@ -15,12 +15,14 @@ class LabeledDevice:
     Notes:
         - Other methods and properties are available on the Device instance (see Pupil Labs Realtime ASYNC API documentation).
         - Device name and IP are cached from device status for easy access.
+        - emission_id: Integer ID used for WebSocket transmission (avoids runtime int conversion)
     """
     label: str
     device: Device
     camera_calibration: Calibration # not an eye-tracking calibration! this is used to correct the distortion of the FPV camera
     name: str  # Device name from phone.device_name
     ip: str    # Device IP address from phone.ip
+    emission_id: int  # ID used for WebSocket transmission
 
 
 async def label_devices(
@@ -62,7 +64,8 @@ async def label_devices(
                 device=dev,
                 camera_calibration=camera_calibration,
                 name=device_name,
-                ip=device_ip
+                ip=device_ip,
+                emission_id=idx  # Use discovery index as emission ID (temporarily)
             )
         else:
             # close the device
