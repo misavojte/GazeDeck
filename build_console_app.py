@@ -20,14 +20,25 @@ def build_executable():
     """Build the executable using PyInstaller."""
     print("Building Gazedeck Console executable...")
     
-    # Clean up old build directory
+    # Try to clean up old build directory (ignore errors)
     if os.path.exists("dist"):
-        import shutil
-        shutil.rmtree("dist")
-        print("Cleaned old build directory")
+        try:
+            import shutil
+            shutil.rmtree("dist")
+            print("Cleaned old build directory")
+        except PermissionError:
+            print("Warning: Could not clean old build directory - some files may be in use.")
+            print("Continuing with build...")
 
-    # Build using spec file
-    cmd = [sys.executable, "-m", "PyInstaller", "--clean", "console_app.spec"]
+    # Build directly with PyInstaller (no spec file needed)
+    cmd = [
+        sys.executable, "-m", "PyInstaller",
+        "--onedir",
+        "--noconfirm", 
+        "--clean",
+        "--name=GazedeckConsole",
+        "console_app.py"
+    ]
     
     try:
         subprocess.check_call(cmd)
