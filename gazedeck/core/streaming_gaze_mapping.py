@@ -3,7 +3,7 @@
 # pupil labs realtime api
 from pupil_labs.neon_recording.calib import Calibration
 from pupil_labs.realtime_api.streaming import GazeData
-from pupil_labs.realtime_api import (  
+from pupil_labs.realtime_api import (
     VideoFrame,
     receive_gaze_data,
     receive_video_frames,
@@ -22,6 +22,7 @@ from gazedeck.core.gaze_mapper import GazeMapper
 from gazedeck.core.surface_layout_labeling import SurfaceLayoutLabeled
 from gazedeck.core.queues import enqueue_sensor_data, get_most_recent_item, get_closest_item
 from gazedeck.core.gaze_filter import ExponentialFilter
+from pupil_labs.realtime_api.streaming import IMUData
 
 @dataclass(frozen=True)
 class GazeMappedSurfaceResult:
@@ -35,7 +36,7 @@ class GazeMappedResult:
 
 async def stream_gaze_mapped_data(labeled_device: LabeledDevice, surface_layouts: Dict[int, SurfaceLayoutLabeled], apriltag_params: Dict[str, Any], gaze_filter_alpha: float = 0.25) -> asyncio.Queue[GazeMappedResult]:
 
-    sensor_gaze_url, sensor_video_url = await get_sensor_urls(labeled_device)
+    sensor_gaze_url, sensor_video_url, sensor_imu_url = await get_sensor_urls(labeled_device)
 
     restart_on_disconnect = True
     
@@ -45,6 +46,7 @@ async def stream_gaze_mapped_data(labeled_device: LabeledDevice, surface_layouts
 
     queue_video: asyncio.Queue[VideoFrame] = asyncio.Queue(maxsize=MAX_QUEUE_VIDEO_SIZE)
     queue_gaze: asyncio.Queue[GazeData] = asyncio.Queue(maxsize=MAX_QUEUE_GAZE_SIZE)
+    queue_imu: asyncio.Queue[IMUData] = asyncio.Queue(maxsize=MAX_QUEUE_GAZE_SIZE)
     # this will be consumed by the caller and we need to pass it to the caller
     queue_result: asyncio.Queue[GazeMappedResult] = asyncio.Queue(maxsize=MAX_QUEUE_GAZE_SIZE)
     
