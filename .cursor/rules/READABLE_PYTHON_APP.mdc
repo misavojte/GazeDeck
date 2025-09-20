@@ -11,4 +11,6 @@ This includes explaining:
 - good practices of Python apps
 - reasons for architectural decisions
 
+Do not create backward compatibility code.
+
 The project must be **easily extendable**.
