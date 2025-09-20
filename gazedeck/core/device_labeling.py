@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Awaitable, Callable, Dict, Optional
+from typing import Awaitable, Callable, Dict, Optional, NamedTuple
 from pupil_labs.realtime_api.device import Device, Calibration
 
 
-@dataclass(frozen=True)
-class LabeledDevice:
+class LabeledDevice(NamedTuple):
     """
     Simple value object combining a user-defined label with a Device instance.
 

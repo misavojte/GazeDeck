@@ -5,7 +5,7 @@ import cv2
 import os
 
 # internal
-from gazedeck.core.surface_layout_discovery import SurfaceLayout
+from gazedeck.core.surface_layout_discovery import SurfaceLayout, TagInfo
 
 # external
 from typing import Dict, Tuple
@@ -31,9 +31,9 @@ def generate_marker(marker_id, side_pixels=100, flip_x=False, flip_y=False):
 	return image_data
 
 
-def generate_surface_layout(id: str, tags: Dict[int, Tuple[float, float]], surface_size: Tuple[float, float]) -> SurfaceLayout:
+def generate_surface_layout(id: str, tags: Dict[int, TagInfo], surface_size: Tuple[float, float]) -> SurfaceLayout:
     """
-    Generate a surface layout from a dictionary of tags and their coordinates.
+    Generate a surface layout from a dictionary of tags and their TagInfo.
     """
     if len(tags) == 0:
         raise ValueError("Tags must be a non-empty dictionary")
@@ -41,10 +41,10 @@ def generate_surface_layout(id: str, tags: Dict[int, Tuple[float, float]], surfa
         raise ValueError("Tags must be a dictionary with unique keys")
     return SurfaceLayout(id, tags, surface_size)
 
-def generate_surface_layout_from_rows_and_columns(id: str, rows: int, columns: int, surface_size: Tuple[float, float], tag_size: float, margin: float = 0.0, starting_tag_id: int = 0) -> SurfaceLayout:
+def generate_surface_layout_from_rows_and_columns(id: str, rows: int, columns: int, surface_size: Tuple[float, float], tag_size_pixels: float, tag_size_meters: float = 0.03, margin: float = 0.0, starting_tag_id: int = 0) -> SurfaceLayout:
     """
     Generate a surface layout from a number of rows and columns.
-    While generating the tags only around the edges of the surface.]
+    While generating the tags only around the edges of the surface.
     Effectively, every inner col or row is skipped.
 
     Tags' coordinates are (x, y) starting from the top left corner of the surface, calculated in the unit of the provided size.
@@ -55,22 +55,23 @@ def generate_surface_layout_from_rows_and_columns(id: str, rows: int, columns: i
     """
     if rows < 2 or columns < 2:
         raise ValueError("Rows and columns must be at least 2")
-    if tag_size <= 0:
+    if tag_size_pixels <= 0:
         raise ValueError("Tag size must be a positive number")
     tags = {}
     tag_id = starting_tag_id
-    spacing_x = (surface_size[0] - tag_size - 2 * margin) / (columns - 1)
-    spacing_y = (surface_size[1] - tag_size - 2 * margin) / (rows - 1)
+    spacing_x = (surface_size[0] - tag_size_pixels - 2 * margin) / (columns - 1)
+    spacing_y = (surface_size[1] - tag_size_pixels - 2 * margin) / (rows - 1)
     for row in range(rows):
         for col in range(columns):
             if row == 0 or row == rows - 1 or col == 0 or col == columns - 1:
                 TOP_LEFT_COORD = (col * spacing_x + margin, row * spacing_y + margin)
-                TOP_RIGHT_COORD = (col * spacing_x + tag_size + margin, row * spacing_y + margin)
-                BOTTOM_LEFT_COORD = (col * spacing_x + margin, row * spacing_y + tag_size + margin)
-                BOTTOM_RIGHT_COORD = (col * spacing_x + tag_size + margin, row * spacing_y + tag_size + margin)
+                TOP_RIGHT_COORD = (col * spacing_x + tag_size_pixels + margin, row * spacing_y + margin)
+                BOTTOM_LEFT_COORD = (col * spacing_x + margin, row * spacing_y + tag_size_pixels + margin)
+                BOTTOM_RIGHT_COORD = (col * spacing_x + tag_size_pixels + margin, row * spacing_y + tag_size_pixels + margin)
 
                 # Bottom right precedes the bottom left because of the convention of using AprilTag coordinates.
-                tags[tag_id] = (TOP_LEFT_COORD, TOP_RIGHT_COORD, BOTTOM_RIGHT_COORD, BOTTOM_LEFT_COORD)
+                corners = (TOP_LEFT_COORD, TOP_RIGHT_COORD, BOTTOM_RIGHT_COORD, BOTTOM_LEFT_COORD)
+                tags[tag_id] = TagInfo(size=tag_size_meters, corners=corners)
                 tag_id += 1
 
     return SurfaceLayout(id, tags, surface_size)

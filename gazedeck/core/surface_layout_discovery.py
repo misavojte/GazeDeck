@@ -2,23 +2,26 @@
 
 # python
 from dataclasses import dataclass
-from typing import Dict, Tuple
+from typing import Dict, Tuple, NamedTuple
 
 # external
 import yaml
 import os
 
-@dataclass(frozen=True)
-class SurfaceLayout:
+class TagInfo(NamedTuple):
+    size: float  # Physical size in meters
+    corners: Tuple[Tuple[float, float], Tuple[float, float], Tuple[float, float], Tuple[float, float]]  # Four corner coordinates
+
+class SurfaceLayout(NamedTuple):
     id: str
-    tags: Dict[int, Tuple[Tuple[float, float], Tuple[float, float], Tuple[float, float], Tuple[float, float]]]  # Each tag has four corner coordinates
+    tags: Dict[int, TagInfo]  # Each tag has size and four corner coordinates
     size: Tuple[float, float] # width, height
 
     def to_dict(self) -> dict:
         """Convert the SurfaceLayout to a dictionary for serialization."""
         return {
             "id": self.id,
-            "tags": {tag_id: [list(corner) for corner in coords] for tag_id, coords in self.tags.items()},
+            "tags": {tag_id: {"size": tag_info.size, "corners": [list(corner) for corner in tag_info.corners]} for tag_id, tag_info in self.tags.items()},
             "size": list(self.size)
         }
 
@@ -28,7 +31,16 @@ def load_surface_layout(file_path: str) -> SurfaceLayout:
     """
     with open(file_path, "r") as f:
         data = yaml.load(f, Loader=yaml.FullLoader)
-    return SurfaceLayout(data["id"], data["tags"], data["size"])
+    
+    # Convert tags data to TagInfo objects
+    tags = {}
+    for tag_id, tag_data in data["tags"].items():
+        tags[int(tag_id)] = TagInfo(
+            size=tag_data["size"],
+            corners=tuple(tuple(corner) for corner in tag_data["corners"])
+        )
+    
+    return SurfaceLayout(data["id"], tags, data["size"])
 
 def discover_all_surface_layouts(directory: str) -> Dict[int, SurfaceLayout]:
     """

@@ -1,13 +1,22 @@
 # gazedeck/core/gaze_mapper.py
 # Simplified gaze mapper using emission_ids and modular components
 
-from typing import Dict, List, NamedTuple, Optional, Any
-import numpy as np
+from typing import Dict, List, NamedTuple, Optional, Any    
 from pupil_labs.realtime_api import GazeData
 
 from .camera_distortion import CameraDistortion
 from .marker_detection import SimpleMarkerDetector, DetectedMarker
 from .surface_tracking import track_surfaces, project_gaze_to_surface
+
+class MarkersToDetect(NamedTuple):
+    """
+    Representing markers of a specific size to detect.
+
+    PERFORMANCE: Immutable for efficient caching and memory usage.
+    """
+    size: float  # Tag size in meters
+    ids: tuple[int, ...]  # Tuple of tag IDs to detect for this size (no conversion needed)
+
 
 class SimpleMappedGaze(NamedTuple):
     """Simple gaze mapping result"""
@@ -34,28 +43,63 @@ class GazeMapper:
         self._surface_locations = {}  # emission_id -> homography_matrix
         self._detected_markers: List[DetectedMarker] = []
 
-    def add_surface(self, markers_verts: dict, surface_size: tuple[float, float],
+        # PERFORMANCE: Pre-computed data structures for efficient processing
+        # Updated during add_surface() - avoids expensive operations per frame
+        self._markers_to_detect: List[MarkersToDetect] = []  # Markers grouped by size for detection
+
+    def add_surface(self, tags: dict, surface_size: tuple[float, float],
                    emission_id: int) -> int:
         """
         Add surface using emission_id directly.
 
         Args:
-            markers_verts: Dict mapping tag_id -> tuple of (x, y) surface coordinates
+            tags: Dict mapping tag_id -> TagInfo with size and corners
             surface_size: (width, height) in pixels
             emission_id: Integer surface ID for WebSocket transmission
 
         Returns:
             The emission_id used
         """
-        # Convert markers_verts from tuple-of-tuples to list-of-tuples for easier processing
+        # Convert TagInfo to the format expected by surface tracking
         converted_markers = {}
-        for tag_id, corners_tuple in markers_verts.items():
-            converted_markers[tag_id] = list(corners_tuple)
+        tag_sizes = {}
+        for tag_id, tag_info in tags.items():
+            converted_markers[tag_id] = list(tag_info.corners)
+            tag_sizes[tag_id] = tag_info.size
 
         self._surfaces[emission_id] = {
             'markers': converted_markers,
-            'size': surface_size
+            'size': surface_size,
+            'tag_sizes': tag_sizes
         }
+
+        # PERFORMANCE: Update pre-computed data structures (construction-time optimization)
+        # Group markers by size for efficient detection
+        size_to_ids = {}
+        for tag_id, tag_size in tag_sizes.items():
+            if tag_size not in size_to_ids:
+                size_to_ids[tag_size] = []
+            size_to_ids[tag_size].append(tag_id)
+
+        # Create MarkersToDetect objects and update the list
+        for tag_size, tag_ids in size_to_ids.items():
+            # Check if we already have this size
+            existing_marker = None
+            for marker in self._markers_to_detect:
+                if marker.size == tag_size:
+                    existing_marker = marker
+                    break
+
+            if existing_marker:
+                # Update existing marker with additional IDs
+                updated_ids = tuple(sorted(set(existing_marker.ids + tuple(tag_ids))))
+                # Remove old and add updated
+                self._markers_to_detect.remove(existing_marker)
+                self._markers_to_detect.append(MarkersToDetect(size=tag_size, ids=updated_ids))
+            else:
+                # Add new marker
+                self._markers_to_detect.append(MarkersToDetect(size=tag_size, ids=tuple(sorted(tag_ids))))
+
         return emission_id
 
     def process_scene(self, frame):
@@ -65,10 +109,33 @@ class GazeMapper:
         elif hasattr(frame, 'bgr_buffer'):
             frame = frame.bgr_buffer()
 
-        # Detect markers and undistort corners
-        self._detected_markers = self._detector.detect_markers(frame, self._camera)
+        # ULTRA OPTIMIZED: Multi-size detection with pre-computed data
+        all_markers = []
 
-        # Track surfaces using CV2 homography
+        # Process each tag size with its specific IDs (pre-computed during construction)
+        for markers_to_detect in self._markers_to_detect:
+            try:
+                # Detect markers for this specific size with immediate ID filtering
+                size_markers = self._detector.detect_markers(
+                    frame,
+                    self._camera,
+                    markers_to_detect.size,
+                    markers_to_detect.ids  # Already a tuple, no conversion needed!
+                )
+                all_markers.extend(size_markers)
+            except Exception:
+                # If detection fails for a specific size, continue with others
+                continue
+
+        # Final deduplication by keeping highest confidence per tag ID
+        unique_markers = {}
+        for marker in all_markers:
+            if marker.tag_id not in unique_markers or marker.confidence > unique_markers[marker.tag_id].confidence:
+                unique_markers[marker.tag_id] = marker
+
+        self._detected_markers = list(unique_markers.values())
+
+        # Track surfaces using CV2 homography with pose validation
         self._surface_locations = track_surfaces(self._detected_markers, self._surfaces)
 
     def process_gaze(self, gaze: GazeData) -> SimpleMapperResult:

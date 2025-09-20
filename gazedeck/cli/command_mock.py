@@ -6,8 +6,8 @@ from __future__ import annotations
 # external
 import argparse
 import asyncio
-from typing import Dict, Any
-from dataclasses import dataclass
+from typing import Dict
+from typing import NamedTuple
 
 from gazedeck.cli.setup_labeled_surface_layouts import setup_labeled_surface_layouts_cli
 from gazedeck.core.surface_layout_labeling import SurfaceLayoutLabeled
@@ -16,8 +16,7 @@ from gazedeck.core.websocket_server import start_ws_server, stop_ws_server, broa
 from gazedeck.core.device_mocking import start_mock_tracking, stop_mock_tracking, get_active_mock_devices
 
 
-@dataclass(frozen=True)
-class MockLabeledDevice:
+class MockLabeledDevice(NamedTuple):
     """
     Mock device equivalent to LabeledDevice for testing purposes.
     """

@@ -15,6 +15,8 @@ class CameraDistortion:
     def __init__(self, camera_distortion: dict):
         self._matrix = np.array(camera_distortion['scene_camera_matrix']).reshape(3, 3)
         self._distortion = np.array(camera_distortion['scene_distortion_coefficients']).reshape(1, 8)
+        # Cache camera parameters for pose estimation [fx, fy, cx, cy]
+        self._camera_params = [self._matrix[0,0], self._matrix[1,1], self._matrix[0,2], self._matrix[1,2]]
 
     def undistort_gaze(self, gaze: tuple[float, float]) -> tuple[float, float]:
         """
@@ -26,8 +28,38 @@ class CameraDistortion:
         Returns:
             (x, y) coordinates in undistorted image space
         """
-        undistorted = undistort_points(self._matrix, self._distortion, [gaze])
+        undistorted = self.undistort_points([gaze])
         return tuple(undistorted[0])
+
+    @property
+    def camera_params(self) -> list[float]:
+        """
+        Get camera parameters for pose estimation [fx, fy, cx, cy].
+
+        Returns:
+            List of camera parameters [fx, fy, cx, cy]
+        """
+        return self._camera_params
+
+    @property
+    def matrix(self) -> npt.NDArray[np.float64]:
+        """
+        Get camera matrix.
+
+        Returns:
+            3x3 camera matrix
+        """
+        return self._matrix
+
+    @property
+    def distortion(self) -> npt.NDArray[np.float64]:
+        """
+        Get distortion coefficients.
+
+        Returns:
+            1x8 distortion coefficients
+        """
+        return self._distortion
 
     def undistort_points(self, points: list[tuple[float, float]]) -> npt.NDArray[np.float32]:
         """

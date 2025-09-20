@@ -13,7 +13,7 @@ from pupil_labs.realtime_api import (
 import asyncio
 from datetime import datetime
 from typing import Dict, Optional, Any
-from dataclasses import dataclass
+from typing import NamedTuple
 
 # internal
 from gazedeck.core.device_labeling import LabeledDevice
@@ -24,13 +24,11 @@ from gazedeck.core.queues import enqueue_sensor_data, get_most_recent_item, get_
 from gazedeck.core.gaze_filter import ExponentialFilter
 from pupil_labs.realtime_api.streaming import IMUData
 
-@dataclass(frozen=True)
-class GazeMappedSurfaceResult:
+class GazeMappedSurfaceResult(NamedTuple):
     x: float
     y: float
 
-@dataclass(frozen=True)
-class GazeMappedResult:
+class GazeMappedResult(NamedTuple):
     timestamp: datetime
     surface_gaze: Dict[str, Optional[GazeMappedSurfaceResult]] # key is surface label, value is GazeMappedSurfaceResult
 

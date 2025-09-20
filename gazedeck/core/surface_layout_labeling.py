@@ -2,14 +2,13 @@
 
 # python
 from __future__ import annotations
-from dataclasses import dataclass
+from typing import NamedTuple, Tuple
 from typing import Awaitable, Callable, Dict, Optional
 
 # internal
-from gazedeck.core.surface_layout_discovery import SurfaceLayout
+from gazedeck.core.surface_layout_discovery import SurfaceLayout, TagInfo
 
-@dataclass(frozen=True)
-class SurfaceLayoutLabeled(SurfaceLayout):
+class SurfaceLayoutLabeled(NamedTuple):
     """
     Surface layout with user-provided label and discovery index.
 
@@ -18,6 +17,9 @@ class SurfaceLayoutLabeled(SurfaceLayout):
         - Adds label (str): User-provided descriptive label
         - Adds emission_id (int): Integer ID used for WebSocket transmission (avoids runtime int conversion)
     """
+    id: str
+    tags: Dict[int, TagInfo]  # Each tag has size and four corner coordinates
+    size: Tuple[float, float] # width, height
     label: str
     emission_id: int  # ID used for WebSocket transmission
 
