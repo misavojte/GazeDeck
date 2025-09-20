@@ -86,7 +86,7 @@ def add_stream_parser(subparsers) -> argparse.ArgumentParser:
     stream_parser.add_argument(
         "--gaze-filter-alpha",
         type=float,
-        default=0.25,
+        default=1,
         help="Exponential smoothing alpha for gaze filter (0.0-1.0, default: 0.25). Lower = smoother, higher = more responsive.",
     )
 
