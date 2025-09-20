@@ -1,0 +1,10 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+
+When you are working with coordinates, you should always use the normalized coordinates.
+The coordinates are normalized to the surface bounds (0.0 = top/left edge, 1.0 = bottom/right edge).
+The coordinates can go outside the surface bounds when the gaze is outside the surface bounds,
+so the normalized coordinates can be outside the 0.0-1.0 range.

@@ -6,7 +6,7 @@ import numpy as np
 from pupil_labs.realtime_api import GazeData
 
 from .camera_distortion import CameraDistortion
-from .marker_detection import SimpleMarkerDetector
+from .marker_detection import SimpleMarkerDetector, DetectedMarker
 from .surface_tracking import track_surfaces, project_gaze_to_surface
 
 class SimpleMappedGaze(NamedTuple):
@@ -32,7 +32,7 @@ class GazeMapper:
         self._detector = SimpleMarkerDetector(apriltag_params)
         self._surfaces = {}  # emission_id -> surface_data
         self._surface_locations = {}  # emission_id -> homography_matrix
-        self._detected_markers = []
+        self._detected_markers: List[DetectedMarker] = []
 
     def add_surface(self, markers_verts: dict, surface_size: tuple[float, float],
                    emission_id: int) -> int:
@@ -123,6 +123,6 @@ class GazeMapper:
         return self._surfaces.copy()
 
     @property
-    def detected_markers(self) -> List[Dict]:
+    def detected_markers(self) -> List[DetectedMarker]:
         """Get detected markers"""
         return self._detected_markers.copy()

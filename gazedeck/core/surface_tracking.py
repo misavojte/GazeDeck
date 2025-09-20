@@ -4,13 +4,14 @@
 import cv2
 import numpy as np
 from typing import List, Dict, Optional
+from .marker_detection import DetectedMarker
 
-def calculate_surface_homography(detected_markers: List[Dict], surface_data: Dict) -> Optional[np.ndarray]:
+def calculate_surface_homography(detected_markers: List[DetectedMarker], surface_data: Dict) -> Optional[np.ndarray]:
     """
     Calculate homography matrix for surface using detected markers.
 
     Args:
-        detected_markers: List of detected markers with 'id' and 'corners'
+        detected_markers: List of DetectedMarker instances with type-safe access
         surface_data: Surface definition with 'markers' mapping tag_id -> corners
 
     Returns:
@@ -22,24 +23,23 @@ def calculate_surface_homography(detected_markers: List[Dict], surface_data: Dic
     all_surface_points = []
 
     for marker in detected_markers:
-        tag_id = marker['id']
-        if tag_id in surface_data['markers']:
+        if marker.tag_id in surface_data['markers']:
             # Get corresponding points for this marker
-            marker_corners = marker['corners']  # List of (x, y) tuples
-            surface_corners = surface_data['markers'][tag_id]  # List of (x, y) tuples
+            marker_corners = list(marker.corners)  # Convert tuple to list for processing
+            surface_corners = surface_data['markers'][marker.tag_id]  # List of (x, y) tuples
 
             if len(marker_corners) == len(surface_corners):
                 all_marker_points.extend(marker_corners)
                 all_surface_points.extend(surface_corners)
 
-    if len(all_marker_points) < 1:  # Need at least 1 point
+    if len(all_marker_points) < 4:  # Need at least 4 corresponding point pairs
         return None
 
     # Convert to numpy arrays with correct shape for cv2.findHomography
     marker_points = np.array(all_marker_points, dtype=np.float32)  # Shape: (N, 2)
     surface_points = np.array(all_surface_points, dtype=np.float32)  # Shape: (N, 2)
 
-    # Calculate homography matrix
+    # Calculate homography matrix with RANSAC to handle outliers
     homography, mask = cv2.findHomography(marker_points, surface_points)
     return homography
 
@@ -74,12 +74,12 @@ def project_gaze_to_surface(gaze_point: tuple[float, float], homography: np.ndar
 
     return normalized_x, normalized_y
 
-def track_surfaces(detected_markers: List[Dict], surface_definitions: Dict[int, Dict]) -> Dict[int, Optional[np.ndarray]]:
+def track_surfaces(detected_markers: List[DetectedMarker], surface_definitions: Dict[int, Dict]) -> Dict[int, Optional[np.ndarray]]:
     """
     Track surfaces by calculating homography for each surface.
 
     Args:
-        detected_markers: List of detected markers
+        detected_markers: List of DetectedMarker instances
         surface_definitions: Dict mapping emission_id -> surface_data
 
     Returns:

@@ -11,6 +11,9 @@ This includes explaining:
 - good practices of Python apps
 - reasons for architectural decisions
 
+Follow rigorously the KISS and DRY principles.
+
 Do not create backward compatibility code.
+Do not use print calls in those parts of the code, where there is high-frequency output.
 
 The project must be **easily extendable**.

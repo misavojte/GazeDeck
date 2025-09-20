@@ -6,6 +6,22 @@ import numpy as np
 import numpy.typing as npt
 import pupil_apriltags
 from typing import List, Dict, Any, Optional
+from dataclasses import dataclass
+from typing import Tuple
+
+@dataclass(frozen=True)
+class DetectedMarker:
+    """
+    Frozen dataclass for detected marker results with type safety.
+
+    Args:
+        tag_id: Unique marker ID
+        corners: List of (x, y) corner coordinates (undistorted)
+        confidence: Detection confidence score (decision_margin from AprilTag)
+    """
+    tag_id: int
+    corners: Tuple[Tuple[float, float], ...]
+    confidence: float
 
 TAG_FAMILY = "tag36h11"
 
@@ -26,23 +42,24 @@ class SimpleMarkerDetector:
             refine_edges=params.get('refine_edges', 1),
         )
 
-    def detect_markers(self, image: npt.NDArray[np.uint8], camera_distortion) -> List[Dict]:
+    def detect_markers(self, image: npt.NDArray[np.uint8], camera_distortion) -> List[DetectedMarker]:
         """
-        Detect AprilTag markers and return simplified format.
+        Detect AprilTag markers and return typed results.
 
         Args:
             image: BGR image array
             camera_distortion: CameraDistortion instance for undistortion
 
         Returns:
-            List of marker dictionaries with:
-            - 'id': tag ID (int)
-            - 'corners': list of (x, y) tuples (undistorted)
+            List of DetectedMarker instances with type-safe access to:
+            - tag_id: marker ID (int)
+            - corners: tuple of (x, y) corner coordinates
+            - confidence: detection confidence score
         """
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         return self.detect_from_gray(gray, camera_distortion)
 
-    def detect_from_gray(self, gray: npt.NDArray[np.uint8], camera_distortion) -> List[Dict]:
+    def detect_from_gray(self, gray: npt.NDArray[np.uint8], camera_distortion) -> List[DetectedMarker]:
         """
         Detect markers from grayscale image.
 
@@ -51,7 +68,7 @@ class SimpleMarkerDetector:
             camera_distortion: CameraDistortion instance for undistortion
 
         Returns:
-            List of marker dictionaries
+            List of DetectedMarker instances
         """
         markers = self._detector.detect(gray)
 
@@ -62,16 +79,17 @@ class SimpleMarkerDetector:
             if tag_id not in unique_markers or marker.decision_margin > unique_markers[tag_id].decision_margin:
                 unique_markers[tag_id] = marker
 
-        # Convert to simple dict format
+        # Convert to typed DetectedMarker format
         result = []
         for marker in unique_markers.values():
             # Extract corners and undistort them
             corners = [[point[0], point[1]] for point in marker.corners]
             undistorted_corners = camera_distortion.undistort_points(corners)
 
-            result.append({
-                'id': marker.tag_id,
-                'corners': undistorted_corners.tolist()
-            })
+            result.append(DetectedMarker(
+                tag_id=marker.tag_id,
+                corners=tuple(tuple(corner) for corner in undistorted_corners.tolist()),
+                confidence=marker.decision_margin
+            ))
 
         return result
