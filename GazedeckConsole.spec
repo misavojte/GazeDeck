@@ -4,7 +4,9 @@
 a = Analysis(
     ['console_app.py'],
     pathex=[],
-    binaries=[],
+    binaries=[
+        ('C:/Users/mail/miniconda3/Lib/site-packages/pupil_apriltags/lib/apriltag.dll', 'pupil_apriltags/lib'),
+    ],
     datas=[],
     hiddenimports=[],
     hookspath=[],

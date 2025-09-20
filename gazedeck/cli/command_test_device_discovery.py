@@ -29,6 +29,11 @@ def add_test_device_discovery_parser(subparsers) -> argparse.ArgumentParser:
         default=10.0,
         help="Device discovery window in seconds (default: 10.0).",
     )
+    test_discovery_parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable detailed debug logging to troubleshoot discovery issues",
+    )
     return test_discovery_parser
 
 
@@ -62,6 +67,11 @@ async def execute_test_device_discovery(args: argparse.Namespace):
     Args:
         args: Parsed command line arguments
     """
+    if args.debug:
+        from gazedeck.core.device_discovery import enable_discovery_debug_logging
+        enable_discovery_debug_logging()
+        print("Debug logging enabled - you'll see detailed discovery information")
+    
     labeled_devices = await run_discovery_and_label(args.duration)
 
     if len(labeled_devices) > 0:

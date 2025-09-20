@@ -30,14 +30,12 @@ def build_executable():
             print("Warning: Could not clean old build directory - some files may be in use.")
             print("Continuing with build...")
 
-    # Build directly with PyInstaller (no spec file needed)
+    # Build using the spec file
     cmd = [
         sys.executable, "-m", "PyInstaller",
-        "--onedir",
         "--noconfirm", 
         "--clean",
-        "--name=GazedeckConsole",
-        "console_app.py"
+        "GazedeckConsole.spec"
     ]
     
     try:
