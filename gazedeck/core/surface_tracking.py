@@ -113,9 +113,6 @@ def project_gaze_to_surface(gaze_point: tuple[float, float], homography: np.ndar
     Returns:
         (x, y) coordinates in surface space (0-1 normalized)
     """
-    if homography is None:
-        return 0.5, 0.5  # Default to center
-
     # Create input array with correct shape for cv2.perspectiveTransform
     # Shape should be (1, 1, 2) for single 2D point
     gaze_array = np.array([[gaze_point[0], gaze_point[1]]], dtype=np.float32).reshape(1, 1, 2)
