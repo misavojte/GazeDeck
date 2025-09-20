@@ -1,357 +1,128 @@
 # gazedeck/core/gaze_mapper.py
-# modified from pupil_labs/real_time_screen_gaze/gaze_mapper.py
+# Simplified gaze mapper using emission_ids and modular components
 
-import os
-import sys
-import uuid
-from typing import Dict, Iterable, List, Mapping, NamedTuple, Optional, Tuple, Any
-
-import cv2
+from typing import Dict, List, NamedTuple, Optional, Any
 import numpy as np
-import numpy.typing as npt
-import pupil_apriltags
 from pupil_labs.realtime_api import GazeData
 
-TAG_FAMILY = "tag36h11"
+from .camera_distortion import SimpleCamera
+from .marker_detection import SimpleMarkerDetector
+from .surface_tracking import track_surfaces, project_gaze_to_surface
 
-from surface_tracker import (
-    CoordinateSpace,
-    CornerId,
-    Marker,
-    MarkerId,
-    Surface,
-    SurfaceId,
-    SurfaceLocation,
-    SurfaceOrientation,
-    SurfaceTracker,
-)
-from surface_tracker.surface import _Surface_V2
+class SimpleMappedGaze(NamedTuple):
+    """Simple gaze mapping result"""
+    surface_id: int  # emission_id
+    x: float
+    y: float
+    base_datum: GazeData
 
-from .camera_models import Radial_Dist_Camera
+class SimpleMapperResult(NamedTuple):
+    """Simple gaze mapping result"""
+    mapped_gaze: Dict[int, List[SimpleMappedGaze]]  # emission_id -> gaze data
 
 class GazeMapper:
-    def __init__(
-        self,
-        calibration,
-        surfaces: Iterable[Surface] = (),
-        apriltag_params: Optional[Dict[str, Any]] = None, # added from initial implementation
-    ) -> None:
-        self._camera: Optional[Radial_Dist_Camera]
-        self._detector: Optional[ApriltagDetector]
-        self._tracker = SurfaceTracker()
-        self._apriltag_params = apriltag_params or {} # added from initial implementation
+    """
+    Simplified gaze mapper using emission_ids and CV2 homography.
 
-        self._surfaces: List[Surface] = list(surfaces)
-        self._recent_result: Optional[MarkerMapperResult] = None
+    No surface_tracker dependency, no complex coordinate spaces.
+    """
+
+    def __init__(self, camera_distortion: dict, apriltag_params: Optional[Dict[str, Any]] = None):
+        self._camera = SimpleCamera(camera_distortion)
+        self._detector = SimpleMarkerDetector(apriltag_params)
+        self._surfaces = {}  # emission_id -> surface_data
+        self._surface_locations = {}  # emission_id -> homography_matrix
         self._detected_markers = []
-        self._surface_locations = {}
 
-        self.camera = Radial_Dist_Camera(
-            name='Scene',
-            resolution=(1, 1),
-            K=calibration["scene_camera_matrix"].reshape((3, 3)),
-            D=calibration["scene_distortion_coefficients"].reshape((8,)),
-        )
+    def add_surface(self, markers_verts: dict, surface_size: tuple[float, float],
+                   emission_id: int) -> int:
+        """
+        Add surface using emission_id directly.
 
-    def process_frame(self, frame, gaze):
-        self.process_scene(frame)
-        return self.process_gaze(gaze)
+        Args:
+            markers_verts: Dict mapping tag_id -> tuple of (x, y) surface coordinates
+            surface_size: (width, height) in pixels
+            emission_id: Integer surface ID for WebSocket transmission
+
+        Returns:
+            The emission_id used
+        """
+        # Convert markers_verts from tuple-of-tuples to list-of-tuples for easier processing
+        converted_markers = {}
+        for tag_id, corners_tuple in markers_verts.items():
+            converted_markers[tag_id] = list(corners_tuple)
+
+        self._surfaces[emission_id] = {
+            'markers': converted_markers,
+            'size': surface_size
+        }
+        return emission_id
 
     def process_scene(self, frame):
-        if not self._detector:
-            return
-
+        """Process video frame to detect markers and track surfaces"""
         if hasattr(frame, 'bgr_pixels'):
             frame = frame.bgr_pixels
-
         elif hasattr(frame, 'bgr_buffer'):
             frame = frame.bgr_buffer()
 
-        self._detected_markers = self._detector.detect_from_image(frame)
+        # Detect markers and undistort corners
+        self._detected_markers = self._detector.detect_markers(frame, self._camera)
 
-        self._surface_locations = {
-            surface.uid: self._tracker.locate_surface(
-                surface=surface,
-                markers=self._detected_markers,
-            )
-            for surface in self._surfaces
-        }
+        # Track surfaces using CV2 homography
+        self._surface_locations = track_surfaces(self._detected_markers, self._surfaces)
 
-    def process_gaze(self, gaze):
+    def process_gaze(self, gaze: GazeData) -> SimpleMapperResult:
+        """
+        Process gaze data using latest surface locations.
+
+        Args:
+            gaze: GazeData from Pupil Labs
+
+        Returns:
+            SimpleMapperResult with mapped gaze data
+        """
         if len(self._surface_locations) == 0:
-            return
+            return SimpleMapperResult({})
 
-        gaze_undistorted = self._camera.undistort_points_on_image_plane([[gaze[0], gaze[1]]])
+        # Undistort gaze point
+        gaze_undistorted = self._camera.undistort_gaze((gaze.x, gaze.y))
 
-        gaze_mapped_norm: npt.NDArray[np.float32]
-        mapped_gaze: Dict[SurfaceId, List[MarkerMappedGaze]] = {}
-        for surface_uid, location in self._surface_locations.items():
-            if location is None:
-                mapped_gaze[surface_uid] = []
+        # Map gaze to each surface using homography
+        mapped_gaze = {}
+        for emission_id, homography in self._surface_locations.items():
+            if homography is None:
+                mapped_gaze[emission_id] = []
                 continue
 
-            gaze_mapped_norm = location._map_from_image_to_surface(gaze_undistorted.reshape(1, 2))
+            # Project gaze to surface using CV2 homography and normalize
+            surface_data = self._surfaces[emission_id]
+            x, y = project_gaze_to_surface(gaze_undistorted, homography, surface_data['size'][0], surface_data['size'][1])
 
-            # Fix: gaze_mapped_norm.tolist() returns list of lists, so we take the first (and only) element
-            norm_pos = gaze_mapped_norm.tolist()[0]
-            mapped_gaze[location.surface_uid] = [
-                MarkerMappedGaze.from_norm_pos(surface_uid, norm_pos, gaze)
-            ]
+            mapped_gaze[emission_id] = [SimpleMappedGaze(emission_id, x, y, gaze)]
 
-        return MarkerMapperResult(self._detected_markers, self._surface_locations, mapped_gaze)
+        return SimpleMapperResult(mapped_gaze)
 
     def clear_surfaces(self):
-        self._surfaces = []
+        """Clear all surfaces"""
+        self._surfaces = {}
+        self._surface_locations = {}
 
-    def add_surface(self, markers_verts, surface_size, name='Screen'):
-        surface = self._generate_surface(markers_verts, surface_size, name)
-        self._surfaces.append(surface)
-        return surface
-
-    def _generate_surface(self, markers_verts, surface_size, name):
-        surface = _Surface_V2(
-            uid=SurfaceId(str(uuid.uuid4())),
-            name=name,
-            registered_markers_undistorted={},
-            orientation=SurfaceOrientation(),
-        )
-
-        for marker_id, marker_verts in markers_verts.items():
-            verts_norm = np.array(marker_verts) / surface_size
-            # REMOVED THE FLIP, different from original code
-            # verts_norm[:,1] = 1 - verts_norm[:,1]
-
-            # ORIGINAL CODE:
-            # marker = _CoreMarker(
-            #     create_apriltag_marker_uid('tag36h11', marker_id),
-            #     CoordinateSpace.SURFACE_UNDISTORTED,
-            #     {
-            #         CornerId.TOP_LEFT: verts_norm[3],
-            #         CornerId.BOTTOM_LEFT: verts_norm[0],
-            #         CornerId.TOP_RIGHT: verts_norm[2],
-            #         CornerId.BOTTOM_RIGHT: verts_norm[1],
-            #     }
-            # )
-
-            # NEW CODE:
-            marker = _CoreMarker(
-                create_apriltag_marker_uid(TAG_FAMILY, marker_id),
-                CoordinateSpace.SURFACE_UNDISTORTED,
-                {
-                    CornerId.TOP_LEFT: verts_norm[0],
-                    CornerId.TOP_RIGHT: verts_norm[1],
-                    CornerId.BOTTOM_RIGHT: verts_norm[2],
-                    CornerId.BOTTOM_LEFT: verts_norm[3],
-                }
-            )
-            surface._add_marker(marker)
-
-        return surface
-
-    def replace_surface(self, surface, new_marker_verts, new_surface_size):
-        new_surface = self._generate_surface(new_marker_verts, new_surface_size, surface.name)
-        idx = self._surfaces.index(surface)
-        self._surfaces[idx] = new_surface
-
-        del surface
-
-        return new_surface
+    def replace_surface(self, emission_id: int, new_marker_verts: dict, new_surface_size: tuple[float, float]) -> int:
+        """Replace surface definition"""
+        if emission_id in self._surfaces:
+            self._surfaces[emission_id]['markers'] = new_marker_verts
+            self._surfaces[emission_id]['size'] = new_surface_size
+            # Clear cached location to force recalculation
+            self._surface_locations.pop(emission_id, None)
+            return emission_id
+        return None
 
     @property
-    def camera(self) -> Optional["Radial_Dist_Camera"]:
-        return self._camera
-
-    @camera.setter
-    def camera(self, camera: Optional["Radial_Dist_Camera"]) -> None:
-        self._camera = camera
-        self._detector = ApriltagDetector(camera, self._apriltag_params)
+    def surfaces(self) -> Dict[int, dict]:
+        """Get copy of surfaces dict"""
+        return self._surfaces.copy()
 
     @property
-    def surfaces(self) -> Tuple[Surface]:
-        return tuple(self._surfaces)
-
-
-class MarkerMappedGaze(NamedTuple):
-    aoi_id: SurfaceId
-    x: float
-    y: float
-    is_on_aoi: bool
-    base_datum: GazeData
-
-    @classmethod
-    def from_norm_pos(
-        cls, aoi_id: SurfaceId, norm_pos: Tuple[float, float], base_datum: GazeData
-    ):
-        on_surface = (0.0 <= norm_pos[0] <= 1.0) and (0.0 <= norm_pos[1] <= 1.0)
-        return cls(aoi_id, *norm_pos, on_surface, base_datum)
-
-
-class MarkerMapperResult(NamedTuple):
-    markers: List[Marker]
-    located_aois: Dict[SurfaceId, Optional[SurfaceLocation]]
-    mapped_gaze: Dict[SurfaceId, List[MarkerMappedGaze]]
-
-
-def create_apriltag_marker_uid(tag_family: str, tag_id: int) -> MarkerId:
-    # Construct the UID by concatinating the tag family and the tag id
-    return MarkerId(f"{tag_family}:{tag_id}")
-
-
-class ApriltagDetector:
-    def __init__(self, camera_model: Radial_Dist_Camera, apriltag_params: Optional[Dict[str, Any]] = None): # added apriltag_params from initial implementation
-        families = TAG_FAMILY
-        self._camera_model = camera_model
-        params = apriltag_params or {} # added apriltag_params from initial implementation
-        self._detector = pupil_apriltags.Detector(
-            families=families,
-            nthreads=params.get('nthreads', 1),                    # Reduced for quality over speed
-            quad_decimate=params.get('quad_decimate', 0.5),       # Higher resolution detection
-            decode_sharpening=params.get('decode_sharpening', 0.25),  # Sharpen for better detection
-            quad_sigma=params.get('quad_sigma', 0.5),             # Gaussian blur for stability
-            debug=params.get('debug', 0),
-            # PRECISION PARAMETERS (optimized for detection quality):
-            refine_edges=params.get('refine_edges', 1),           # Sub-pixel edge refinement
-        )
-
-    def detect_from_image(self, image: npt.NDArray[np.uint8]) -> List[Marker]:
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        return self.detect_from_gray(gray)
-
-    def detect_from_gray(self, gray: npt.NDArray[np.uint8]) -> List[Marker]:
-        # Detect apriltag markers from the gray image
-        markers = self._detector.detect(gray)
-
-        # ORIGINAL CODE (kept for reference):
-        # # Ensure detected markers are unique
-        # # TODO: Between duplicate markers, pick the one with higher confidence
-        # uid_fn = self.__apiltag_marker_uid
-        # markers = {uid_fn(m): m for m in markers}.values()
-        #
-        # # Convert apriltag markers into surface tracker markers
-        # marker_fn = self.__apriltag_marker_to_surface_marker
-        # markers = [marker_fn(m) for m in markers]
-
-        # OPTIMIZED CODE:
-        # Deduplicate markers by UID, keeping the one with highest decision_margin (confidence)
-        unique_markers = {}
-        for marker in markers:
-            uid = create_apriltag_marker_uid(TAG_FAMILY, marker.tag_id)
-            if uid not in unique_markers or marker.decision_margin > unique_markers[uid].decision_margin:
-                unique_markers[uid] = marker
-
-        # Convert apriltag markers into surface tracker markers
-        markers = [self.__apriltag_marker_to_surface_marker(m) for m in unique_markers.values()]
-
-        return markers
-
-    # ORIGINAL CODE (kept for reference):
-    # @staticmethod
-    # def __apiltag_marker_uid(
-    #     apriltag_marker: pupil_apriltags.Detection,
-    # ) -> MarkerId:
-    #     family = apriltag_marker.tag_family.decode("utf-8")
-    #     tag_id = int(apriltag_marker.tag_id)
-    #     return create_apriltag_marker_uid(family, tag_id)
-
-    def __apriltag_marker_to_surface_marker(
-        self, apriltag_marker: pupil_apriltags.Detection
-    ) -> Marker:
-
-        # ORIGINAL CODE:
-        # Construct the surface tracker marker UID
-        # uid = ApriltagDetector.__apiltag_marker_uid(apriltag_marker)
-
-        # OPTIMIZED CODE:
-        # Always the same family
-        uid = create_apriltag_marker_uid(TAG_FAMILY, apriltag_marker.tag_id)
-
-        # Extract vertices in the correct format form apriltag marker
-        vertices = [[point] for point in apriltag_marker.corners]
-        vertices = self._camera_model.undistort_points_on_image_plane(vertices)
-
-        # ORIGINAL CODE:
-        # # TODO: Verify this is correct...
-        # starting_with = CornerId.TOP_LEFT
-        # clockwise = True
-
-        # CURRENT CORRECT CODE:
-        # The following code is correct!!!
-        # It behaves far better when there is only one marker in the image,
-        # Even if this seems illogical, it is correct.
-        # The test with ONE APRILTAG shows the correct behavior.
-        #
-        # This is what is returned by the underlying C library,
-        # TODO: verify with accademic paper or code directly.
-        starting_with = CornerId.TOP_RIGHT
-        clockwise = False
-
-        return Marker.from_vertices(
-            uid=uid,
-            undistorted_image_space_vertices=vertices,
-            starting_with=starting_with,
-            clockwise=clockwise,
-        )
-
-
-class _CoreMarker(Surface):
-    version = 1
-
-    @property
-    def name(self) -> str:
-        return self.__name
-
-    @property
-    def _registered_markers_by_uid_undistorted(self) -> Mapping[MarkerId, Marker]:
-        return self.__registered_markers_by_uid_undistorted
-
-    @_registered_markers_by_uid_undistorted.setter
-    def _registered_markers_by_uid_undistorted(self, value: Mapping[MarkerId, Marker]):
-        self.__registered_markers_by_uid_undistorted = value
-
-    @property
-    def orientation(self) -> SurfaceOrientation:
-        return self.__orientation
-
-    @orientation.setter
-    def orientation(self, value: SurfaceOrientation):
-        self.__orientation = value
-
-    @property
-    def uid(self) -> MarkerId:
-        return self.__uid
-
-    @property
-    def coordinate_space(self) -> CoordinateSpace:
-        return self.__coordinate_space
-
-    def _vertices_in_order(self, order: List[CornerId]) -> List[Tuple[float, float]]:
-        mapping = self.__vertices_by_corner_id
-        return [mapping[c] for c in order]
-
-    @staticmethod
-    def from_dict(value: dict) -> "Marker":
-        try:
-            return _CoreMarker(
-                uid=value["uid"],
-                coordinate_space=CoordinateSpace.SURFACE_UNDISTORTED,
-                vertices_by_corner_id=dict(zip(CornerId, value["verts_uv"])),
-            )
-        except Exception as err:
-            raise ValueError(err)
-
-    def as_dict(self) -> dict:
-        return {
-            "uid": self.__uid,
-            "space": self.__coordinate_space,
-            "vertices": self.__vertices_by_corner_id,
-        }
-
-    def __init__(
-        self,
-        uid: MarkerId,
-        coordinate_space: CoordinateSpace,
-        vertices_by_corner_id: Mapping[CornerId, Tuple[float, float]],
-    ):
-        self.__uid = uid
-        self.__coordinate_space = coordinate_space
-        self.__vertices_by_corner_id = vertices_by_corner_id
+    def detected_markers(self) -> List[Dict]:
+        """Get detected markers"""
+        return self._detected_markers.copy()

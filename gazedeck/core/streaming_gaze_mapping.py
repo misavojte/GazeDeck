@@ -75,20 +75,22 @@ async def stream_gaze_mapped_data(labeled_device: LabeledDevice, surface_layouts
     print(f"✅ Gaze mapping task started for device {labeled_device.emission_id} {labeled_device.label}, returning queue")
     return queue_result
 
-async def match_and_map_gaze(queue_video: asyncio.Queue[VideoFrame], queue_gaze: asyncio.Queue[GazeData], output_queue: asyncio.Queue[GazeMappedResult], calibration: Calibration, surface_layouts: Dict[int, SurfaceLayoutLabeled], apriltag_params: Dict[str, Any], gaze_filter_alpha: float = 0.25) -> None:
+async def match_and_map_gaze(queue_video: asyncio.Queue[VideoFrame], queue_gaze: asyncio.Queue[GazeData], output_queue: asyncio.Queue[GazeMappedResult], camera_distortion: dict, surface_layouts: Dict[int, SurfaceLayoutLabeled], apriltag_params: Dict[str, Any], gaze_filter_alpha: float = 0.25) -> None:
 
     print(f"🗺️ Initializing gaze mapper with {len(surface_layouts)} surface layouts")
 
-    # initialize gaze mapper
-    gaze_mapper = GazeMapper(calibration, apriltag_params=apriltag_params) # init without surfaces, we need to use .add_surface()
+    # initialize gaze mapper with camera distortion
+    gaze_mapper = GazeMapper(camera_distortion, apriltag_params)
 
-    # key is gaze_mapper surface id, value is surface_layout label
-    surface_uid_dict = {}
+    # Direct mapping using emission_ids - no UUID conversion needed
     for surface_layout in surface_layouts.values():
-        created_surface = gaze_mapper.add_surface(surface_layout.tags, surface_layout.size, surface_layout.label)
-        surface_uid_dict[created_surface.uid] = surface_layout.label
+        gaze_mapper.add_surface(
+            surface_layout.tags,
+            surface_layout.size,
+            surface_layout.emission_id  # Use emission_id directly
+        )
 
-    print(f"📋 Surface mapping: {surface_uid_dict}")
+    print(f"📋 Surface mapping complete")
 
     # Initialize gaze filter
     gaze_filter = ExponentialFilter(alpha=gaze_filter_alpha)
@@ -114,18 +116,21 @@ async def match_and_map_gaze(queue_video: asyncio.Queue[VideoFrame], queue_gaze:
             gaze_ts, gaze_item = await get_most_recent_item(queue_gaze)
             if latest_surface_result is None:
                 # No surface detected yet, emit None for all surfaces
-                surface_gaze: Dict[str, Optional[GazeMappedSurfaceResult]] = {surface_label: None for surface_label in surface_uid_dict.values()}
+                surface_gaze: Dict[str, Optional[GazeMappedSurfaceResult]] = {layout.label: None for layout in surface_layouts.values()}
             else:
                 # Process gaze using the latest surface detection
                 gaze_mapped_result = await asyncio.to_thread(gaze_mapper.process_gaze, gaze_item)
 
                 if gaze_mapped_result is None:
-                    surface_gaze = {surface_label: None for surface_label in surface_uid_dict.values()}
+                    surface_gaze = {layout.label: None for layout in surface_layouts.values()}
                 else:
                     surface_gaze: Dict[str, Optional[GazeMappedSurfaceResult]] = {}
-                    for surface_uid, surface_label in surface_uid_dict.items():
-                        if surface_uid in gaze_mapped_result.mapped_gaze and gaze_mapped_result.mapped_gaze[surface_uid]:
-                            mapped_data = gaze_mapped_result.mapped_gaze[surface_uid][0]
+                    for surface_layout in surface_layouts.values():
+                        emission_id = surface_layout.emission_id
+                        surface_label = surface_layout.label
+
+                        if emission_id in gaze_mapped_result.mapped_gaze and gaze_mapped_result.mapped_gaze[emission_id]:
+                            mapped_data = gaze_mapped_result.mapped_gaze[emission_id][0]
 
                             # Apply filter
                             smooth_x, smooth_y = gaze_filter.filter(mapped_data.x, mapped_data.y)
@@ -133,7 +138,7 @@ async def match_and_map_gaze(queue_video: asyncio.Queue[VideoFrame], queue_gaze:
                             surface_gaze[surface_label] = GazeMappedSurfaceResult(
                                 x=smooth_x,
                                 y=smooth_y,
-                                is_on_surface=mapped_data.is_on_aoi
+                                is_on_surface=True  # Always true since we removed boundary checking
                             )
                         else:
                             surface_gaze[surface_label] = None
