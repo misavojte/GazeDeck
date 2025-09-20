@@ -26,13 +26,13 @@ class SimpleMarkerDetector:
             refine_edges=params.get('refine_edges', 1),
         )
 
-    def detect_markers(self, image: npt.NDArray[np.uint8], camera) -> List[Dict]:
+    def detect_markers(self, image: npt.NDArray[np.uint8], camera_distortion) -> List[Dict]:
         """
         Detect AprilTag markers and return simplified format.
 
         Args:
             image: BGR image array
-            camera: SimpleCamera instance for undistortion
+            camera_distortion: CameraDistortion instance for undistortion
 
         Returns:
             List of marker dictionaries with:
@@ -40,15 +40,15 @@ class SimpleMarkerDetector:
             - 'corners': list of (x, y) tuples (undistorted)
         """
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        return self.detect_from_gray(gray, camera)
+        return self.detect_from_gray(gray, camera_distortion)
 
-    def detect_from_gray(self, gray: npt.NDArray[np.uint8], camera) -> List[Dict]:
+    def detect_from_gray(self, gray: npt.NDArray[np.uint8], camera_distortion) -> List[Dict]:
         """
         Detect markers from grayscale image.
 
         Args:
             gray: Grayscale image array
-            camera: SimpleCamera instance for undistortion
+            camera_distortion: CameraDistortion instance for undistortion
 
         Returns:
             List of marker dictionaries
@@ -67,7 +67,7 @@ class SimpleMarkerDetector:
         for marker in unique_markers.values():
             # Extract corners and undistort them
             corners = [[point[0], point[1]] for point in marker.corners]
-            undistorted_corners = camera.undistort_points(corners)
+            undistorted_corners = camera_distortion.undistort_points(corners)
 
             result.append({
                 'id': marker.tag_id,

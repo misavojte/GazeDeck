@@ -5,7 +5,7 @@ from typing import Dict, List, NamedTuple, Optional, Any
 import numpy as np
 from pupil_labs.realtime_api import GazeData
 
-from .camera_distortion import SimpleCamera
+from .camera_distortion import CameraDistortion
 from .marker_detection import SimpleMarkerDetector
 from .surface_tracking import track_surfaces, project_gaze_to_surface
 
@@ -28,7 +28,7 @@ class GazeMapper:
     """
 
     def __init__(self, camera_distortion: dict, apriltag_params: Optional[Dict[str, Any]] = None):
-        self._camera = SimpleCamera(camera_distortion)
+        self._camera = CameraDistortion(camera_distortion)
         self._detector = SimpleMarkerDetector(apriltag_params)
         self._surfaces = {}  # emission_id -> surface_data
         self._surface_locations = {}  # emission_id -> homography_matrix
