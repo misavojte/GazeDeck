@@ -204,16 +204,9 @@ class MockTracker:
             normalized_x = gaze_x / surface.size[0] if surface.size[0] > 0 else 0.0
             normalized_y = gaze_y / surface.size[1] if surface.size[1] > 0 else 0.0
 
-            # Check if gaze is within surface bounds (but don't exclude data)
-            is_on_surface = (
-                0 <= gaze_x <= surface.size[0] and
-                0 <= gaze_y <= surface.size[1]
-            )
-
             surface_gaze[surface_emission_id] = {
                 "x": normalized_x,
-                "y": normalized_y,
-                "is_on_surface": is_on_surface
+                "y": normalized_y
             }
 
         # Broadcast binary messages - one per surface (not nested JSON)

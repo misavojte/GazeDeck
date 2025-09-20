@@ -27,7 +27,6 @@ from gazedeck.core.gaze_filter import ExponentialFilter
 class GazeMappedSurfaceResult:
     x: float
     y: float
-    is_on_surface: bool
 
 @dataclass(frozen=True)
 class GazeMappedResult:
@@ -137,8 +136,7 @@ async def match_and_map_gaze(queue_video: asyncio.Queue[VideoFrame], queue_gaze:
 
                             surface_gaze[surface_label] = GazeMappedSurfaceResult(
                                 x=smooth_x,
-                                y=smooth_y,
-                                is_on_surface=True  # Always true since we removed boundary checking
+                                y=smooth_y
                             )
                         else:
                             surface_gaze[surface_label] = None
@@ -181,7 +179,6 @@ async def match_and_map_gaze(queue_video: asyncio.Queue[VideoFrame], queue_gaze:
     #                 surface_gaze[surface_label] = GazeMappedSurfaceResult(
     #                     x=mapped_data.x,
     #                     y=mapped_data.y,
-    #                     is_on_surface=mapped_data.is_on_aoi
     #                 )
     #             else:
     #                 surface_gaze[surface_label] = None
