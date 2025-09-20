@@ -32,7 +32,7 @@ def calculate_surface_homography(detected_markers: List[Dict], surface_data: Dic
                 all_marker_points.extend(marker_corners)
                 all_surface_points.extend(surface_corners)
 
-    if len(all_marker_points) < 4:  # Need at least 4 points
+    if len(all_marker_points) < 1:  # Need at least 1 point
         return None
 
     # Convert to numpy arrays with correct shape for cv2.findHomography
