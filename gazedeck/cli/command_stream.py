@@ -38,8 +38,8 @@ def add_stream_parser(subparsers) -> argparse.ArgumentParser:
     stream_parser.add_argument(
         "--duration",
         type=float,
-        default=10.0,
-        help="Device discovery window in seconds (default: 10.0).",
+        default=3.0,
+        help="Device discovery window in seconds (default: 3.0).",
     )
 
     # AprilTag detector parameters
@@ -64,7 +64,7 @@ def add_stream_parser(subparsers) -> argparse.ArgumentParser:
     stream_parser.add_argument(
         "--apriltag-quad-sigma",
         type=float,
-        default=0.5,
+        default=0.0,
         help="Quad sigma factor for AprilTag detection (default: 0.5 - stability enhancement).",
     )
     stream_parser.add_argument(

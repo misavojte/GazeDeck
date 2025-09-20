@@ -84,6 +84,11 @@ async def discover_devices_indexed(duration: float = 3.0) -> Dict[int, Device]:
         3) For each service, *race* all advertised IPv4+IPv6 addresses on the
            advertised port and build `Device` from the winner.
 
+    Discovery behavior:
+    - Waits for the full `duration` seconds to discover all available devices
+    - After the discovery period, waits 0.5 additional seconds to finish
+      connecting to any devices that were in the process of being discovered.
+
     Deterministic output:
     - We dedupe by service instance name and return a stable index ordered by name.
 
@@ -94,7 +99,6 @@ async def discover_devices_indexed(duration: float = 3.0) -> Dict[int, Device]:
     logger.info(f"Starting device discovery for {duration} seconds...")
     azc = AsyncZeroconf()  # binds across all local NICs (IPv4/IPv6)
     by_name: Dict[str, Device] = {}
-    got_any = asyncio.Event()
     services_seen = 0
 
     def on_service_state_change(zeroconf, service_type: str, name: str, state_change: ServiceStateChange) -> None:
@@ -136,7 +140,6 @@ async def discover_devices_indexed(duration: float = 3.0) -> Dict[int, Device]:
             if dev:
                 logger.info(f"Successfully connected to device: {name} -> {dev.address}:{dev.port}")
                 by_name.setdefault(name, dev)
-                got_any.set()
             else:
                 logger.warning(f"Failed to connect to any address for {name}")
         except Exception as e:
@@ -150,15 +153,9 @@ async def discover_devices_indexed(duration: float = 3.0) -> Dict[int, Device]:
 
     try:
         logger.info(f"Browsing for services of type: {SERVICE_TYPE}")
-        try:
-            await asyncio.wait_for(got_any.wait(), timeout=duration)
-            logger.info("Found at least one device, continuing discovery...")
-        except asyncio.TimeoutError:
-            logger.info(f"Discovery timeout after {duration} seconds")
-        
-        # Give a bit more time to find additional devices
-        await asyncio.sleep(0.5)
-        
+        # Wait for the full discovery duration
+        await asyncio.sleep(duration)
+
     finally:
         logger.debug("Cleaning up discovery resources...")
         await browser.async_cancel()

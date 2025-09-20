@@ -292,7 +292,7 @@ from gazedeck.cli.setup_labeled_devices import setup_labeled_devices_cli
 from gazedeck.core.streaming_gaze_mapping import stream_gaze_mapped_data
 
 # Discover and label devices
-devices = await setup_labeled_devices_cli(discovery_duration=10.0)
+devices = await setup_labeled_devices_cli(duration=10.0)
 
 # Stream gaze data for a device
 for device_label, device in devices.items():
