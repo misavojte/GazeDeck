@@ -100,7 +100,8 @@ async def match_and_map_gaze(queue_video: asyncio.Queue[VideoFrame], queue_gaze:
     while True:
         # Get the most recent video frame and gaze data
         video_ts, video_item = await get_most_recent_item(queue_video)
-        gaze_ts, gaze_item = await get_most_recent_item(queue_gaze)
+        #gaze_ts, gaze_item = await get_most_recent_item(queue_gaze)
+        gaze_ts, gaze_item = await get_closest_item(queue_gaze, video_ts)
         
         # Process video frame for surface detection (no caching)
         await asyncio.to_thread(gaze_mapper.process_scene, video_item)
