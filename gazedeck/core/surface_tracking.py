@@ -3,8 +3,17 @@
 
 import cv2
 import numpy as np
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, NamedTuple
 from .marker_detection import DetectedMarker
+
+class SurfaceLocation(NamedTuple):
+    """
+    Surface location data with homography matrix and timestamp.
+
+    Immutable for efficient caching and memory usage.
+    """
+    homography: np.ndarray  # 3x3 homography matrix
+    timestamp: float  # Unix timestamp from video frame
 
 def _reorder_corners_top_left_ccw(corners: list) -> list:
     """
@@ -30,16 +39,17 @@ def _reorder_corners_top_left_ccw(corners: list) -> list:
     ordered = ccw[top_left_idx:] + ccw[:top_left_idx]
     return ordered
 
-def calculate_surface_homography(detected_markers: List[DetectedMarker], surface_data: Dict) -> Optional[np.ndarray]:
+def calculate_surface_homography(detected_markers: List[DetectedMarker], surface_data: Dict, timestamp: float) -> Optional[np.ndarray]:
     """
     Calculate homography matrix for surface using detected markers with 3D pose validation.
-    
+
     POSE-ENHANCED MODE: Uses 3D pose information to validate marker reliability
     and create more accurate homography. Returns None immediately if poses are inconsistent.
 
     Args:
         detected_markers: List of DetectedMarker instances with mandatory pose data
         surface_data: Surface definition with 'markers' mapping tag_id -> corners
+        timestamp: Unix timestamp from the video frame
 
     Returns:
         3x3 homography matrix or None if insufficient/unreliable markers detected
@@ -127,20 +137,24 @@ def project_gaze_to_surface(gaze_point: tuple[float, float], homography: np.ndar
 
     return normalized_x, normalized_y
 
-def track_surfaces(detected_markers: List[DetectedMarker], surface_definitions: Dict[int, Dict]) -> Dict[int, Optional[np.ndarray]]:
+def track_surfaces(detected_markers: List[DetectedMarker], surface_definitions: Dict[int, Dict], timestamp: float) -> Dict[int, Optional[SurfaceLocation]]:
     """
     Track surfaces by calculating homography for each surface.
 
     Args:
         detected_markers: List of DetectedMarker instances
         surface_definitions: Dict mapping emission_id -> surface_data
+        timestamp: Unix timestamp from the video frame
 
     Returns:
-        Dict mapping emission_id -> homography_matrix (or None)
+        Dict mapping emission_id -> SurfaceLocation (or None if no valid homography)
     """
     locations = {}
     for emission_id, surface_data in surface_definitions.items():
-        homography = calculate_surface_homography(detected_markers, surface_data)
-        locations[emission_id] = homography
+        homography = calculate_surface_homography(detected_markers, surface_data, timestamp)
+        if homography is not None:
+            locations[emission_id] = SurfaceLocation(homography, timestamp)
+        else:
+            locations[emission_id] = None
 
     return locations

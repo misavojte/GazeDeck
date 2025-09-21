@@ -7,7 +7,7 @@ from pupil_labs.realtime_api.streaming import VideoFrame
 
 from .camera_distortion import CameraDistortion
 from .marker_detection import SimpleMarkerDetector, DetectedMarker
-from .surface_tracking import track_surfaces, project_gaze_to_surface
+from .surface_tracking import track_surfaces, project_gaze_to_surface, SurfaceLocation
 
 class MarkersToDetect(NamedTuple):
     """
@@ -41,7 +41,7 @@ class GazeMapper:
         self._camera = CameraDistortion(camera_distortion)
         self._detector = SimpleMarkerDetector(apriltag_params)
         self._surfaces = {}  # emission_id -> surface_data
-        self._surface_locations = {}  # emission_id -> homography_matrix
+        self._surface_locations = {}  # emission_id -> SurfaceLocation
         self._detected_markers: List[DetectedMarker] = []
 
         # PERFORMANCE: Pre-computed data structures for efficient processing
@@ -135,10 +135,10 @@ class GazeMapper:
                 unique_markers[marker.tag_id] = marker
 
         detected_markers = list(unique_markers.values())
-        source_frame_timestamp = frame.timestamp_unix_seconds # TODO: use later
+        source_frame_timestamp = frame.timestamp_unix_seconds
 
         # Track surfaces using CV2 homography with pose validation
-        self._surface_locations = track_surfaces(detected_markers, self._surfaces)
+        self._surface_locations = track_surfaces(detected_markers, self._surfaces, source_frame_timestamp)
 
     def process_gaze(self, gaze: GazeData) -> SimpleMapperResult:
         """
@@ -158,14 +158,14 @@ class GazeMapper:
 
         # Map gaze to each surface using homography
         mapped_gaze = {}
-        for emission_id, homography in self._surface_locations.items():
-            if homography is None:
+        for emission_id, surface_location in self._surface_locations.items():
+            if surface_location is None:
                 mapped_gaze[emission_id] = []
                 continue
 
             # Project gaze to surface using CV2 homography and normalize
             surface_data = self._surfaces[emission_id]
-            x, y = project_gaze_to_surface(gaze_undistorted, homography, surface_data['size'][0], surface_data['size'][1])
+            x, y = project_gaze_to_surface(gaze_undistorted, surface_location.homography, surface_data['size'][0], surface_data['size'][1])
 
             mapped_gaze[emission_id] = [SimpleMappedGaze(emission_id, x, y, gaze)]
 
