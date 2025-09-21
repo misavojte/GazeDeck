@@ -107,7 +107,7 @@ def execute_generate_surface(args: argparse.Namespace):
             rows=args.rows,
             columns=args.columns,
             surface_size=(args.surface_width, args.surface_height),
-            tag_size=args.tag_size,
+            tag_size_pixels=args.tag_size,
             margin=args.margin,
             starting_tag_id=args.starting_tag_id
         )

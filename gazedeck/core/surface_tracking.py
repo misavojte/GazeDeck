@@ -15,29 +15,6 @@ class SurfaceLocation(NamedTuple):
     homography: Optional[np.ndarray]  # 3x3 homography matrix or None
     timestamp: float  # Unix timestamp from video frame
 
-def _reorder_corners_top_left_ccw(corners: list) -> list:
-    """
-    Ensure corners start at top-left and are ordered counter-clockwise.
-    This makes detected and defined corners comparable regardless of rotation.
-    """
-    if len(corners) != 4:
-        return corners
-    # Compute centroid
-    cx = sum(p[0] for p in corners) / 4.0
-    cy = sum(p[1] for p in corners) / 4.0
-    # Compute angles from centroid
-    pts_with_angle = []
-    for (x, y) in corners:
-        angle = np.arctan2(y - cy, x - cx)
-        pts_with_angle.append(((x, y), angle))
-    # Sort CCW by angle
-    pts_with_angle.sort(key=lambda t: t[1])
-    ccw = [p for (p, _) in pts_with_angle]
-    # Find top-left (min y, then min x)
-    top_left_idx = min(range(4), key=lambda i: (ccw[i][1], ccw[i][0]))
-    # Rotate so it starts at top-left
-    ordered = ccw[top_left_idx:] + ccw[:top_left_idx]
-    return ordered
 
 def calculate_surface_homography(detected_markers: List[DetectedMarker], surface_data: Dict, timestamp: float) -> Optional[np.ndarray]:
     """
@@ -58,8 +35,8 @@ def calculate_surface_homography(detected_markers: List[DetectedMarker], surface
     for marker in detected_markers:
         if marker.tag_id in surface_data['markers']:
             # Get corresponding points for this marker
-            marker_corners = _reorder_corners_top_left_ccw(list(marker.corners))
-            surface_corners = _reorder_corners_top_left_ccw(list(surface_data['markers'][marker.tag_id]))
+            marker_corners = (list(marker.corners))
+            surface_corners = list(surface_data['markers'][marker.tag_id])
 
             if len(marker_corners) == len(surface_corners):
                 all_marker_points.extend(marker_corners)
@@ -76,11 +53,7 @@ def calculate_surface_homography(detected_markers: List[DetectedMarker], surface
     # Calculate homography matrix with RANSAC to handle outliers
     homography, mask = cv2.findHomography(
         marker_points,
-        surface_points,
-        method=cv2.RANSAC,
-        ransacReprojThreshold=2.0,
-        maxIters=1000,
-        confidence=0.995
+        surface_points
     )
 
     # Check if RANSAC found a good homography
@@ -88,9 +61,9 @@ def calculate_surface_homography(detected_markers: List[DetectedMarker], surface
         return None
 
     # Check if enough inliers were found (at least 80% of points)
-    inlier_ratio = np.sum(mask) / len(mask) if len(mask) > 0 else 0
-    if inlier_ratio < 0.8:
-        return None
+    # inlier_ratio = np.sum(mask) / len(mask) if len(mask) > 0 else 0
+    # if inlier_ratio < 0.8:
+    #     return None
     
     return homography
 

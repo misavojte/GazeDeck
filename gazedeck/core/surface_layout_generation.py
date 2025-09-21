@@ -69,8 +69,10 @@ def generate_surface_layout_from_rows_and_columns(id: str, rows: int, columns: i
                 BOTTOM_LEFT_COORD = (col * spacing_x + margin, row * spacing_y + tag_size_pixels + margin)
                 BOTTOM_RIGHT_COORD = (col * spacing_x + tag_size_pixels + margin, row * spacing_y + tag_size_pixels + margin)
 
-                # Bottom right precedes the bottom left because of the convention of using AprilTag coordinates.
-                corners = (TOP_LEFT_COORD, TOP_RIGHT_COORD, BOTTOM_RIGHT_COORD, BOTTOM_LEFT_COORD)
+                # AprilTag convention: corners ordered counter-clockwise starting from bottom-left
+                # This matches what the marker detection expects as input
+                # 0: bottom-left, 1: bottom-right, 2: top-right, 3: top-left
+                corners = (BOTTOM_LEFT_COORD, BOTTOM_RIGHT_COORD, TOP_RIGHT_COORD, TOP_LEFT_COORD)
                 tags[tag_id] = TagInfo(size=tag_size_meters, corners=corners)
                 tag_id += 1
 
@@ -95,7 +97,9 @@ def save_surface_layout(layout: SurfaceLayout, output_dir: str):
 
     # Generate and save AprilTag images
     for tag_id in layout.tags.keys():
-        image_data = generate_marker(tag_id)
+        # flip x and y to match the AprilTag convention!!!
+        # otherwise the surface tracking will not work correctly!!!
+        image_data = generate_marker(tag_id, flip_x=True, flip_y=True)
         cv2.imwrite(os.path.join(output_dir, f"tag_{tag_id}.png"), image_data)
 
     # Save configuration

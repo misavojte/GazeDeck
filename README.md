@@ -412,3 +412,20 @@ GazeDeck consists of several key components:
 - **WebSocket Broadcasting**: Binary message streaming to clients
 - **Calibration Integration**: Uses Pupil Labs calibration data for accuracy
 
+### Corner Ordering Convention
+
+**IMPORTANT**: Throughout the entire system, AprilTag corners are consistently ordered in **counter-clockwise** direction starting from the **bottom-left** corner:
+
+- **0**: bottom-left
+- **1**: bottom-right  
+- **2**: top-right
+- **3**: top-left
+
+This convention is used in:
+- Surface layout generation (`surface_layout_generation.py`)
+- Marker detection (`marker_detection.py`) 
+- Surface tracking (`surface_tracking.py`)
+- All YAML configuration files
+
+This consistent ordering ensures accurate homography calculations and surface mapping without requiring corner reordering between different system components.
+

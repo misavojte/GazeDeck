@@ -74,14 +74,20 @@ class SimpleMarkerDetector:
         result = []
         for marker in markers:
             # Extract corners and undistort them
-            corners = [[point[0], point[1]] for point in marker.corners]
-            undistorted_corners = camera_distortion.undistort_points(corners)
+            # IMPORTANT!!!
+            # AprilTag detectors return corners that wrap counter-clock wise around the tag.
+            # 0 bottom-left
+            # 1 bottom-right
+            # 2 top-right
+            # 3 top-left
+            # no need to reorder them!!!
+            undistorted_corners = camera_distortion.undistort_points(marker.corners)
 
             result.append(DetectedMarker(
                 tag_id=marker.tag_id,
                 corners=tuple(tuple(corner) for corner in undistorted_corners.tolist()),
                 confidence=marker.decision_margin,
-                original_corners=tuple(tuple(corner) for corner in corners)
+                original_corners=tuple(tuple(corner) for corner in marker.corners)
             ))
 
         return result
