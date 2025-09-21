@@ -96,6 +96,13 @@ def add_stream_parser(subparsers) -> argparse.ArgumentParser:
         action="store_true",
         help="Automatically label surfaces based on their IDs instead of prompting for labels.",
     )
+    
+    # CV visualization
+    stream_parser.add_argument(
+        "--cv",
+        action="store_true", 
+        help="Enable live OpenCV visualization showing detected tags and surfaces.",
+    )
     return stream_parser
 
 
@@ -174,9 +181,20 @@ async def execute_stream(args: argparse.Namespace):
             'refine_edges': args.apriltag_refine_edges,
         }
 
+        # Always start normal WebSocket streaming
         stream_tasks = [
             asyncio.create_task(stream_gaze_mapped_data_to_ws(labeled_device, labeled_surface_layouts, apriltag_params, args.gaze_filter_alpha)) for labeled_device in labeled_devices.values()
         ]
+        
+        # Add CV visualization as parallel task if requested
+        if args.cv:
+            if len(labeled_devices) > 1:
+                print("⚠️  CV visualization currently supports single device only. Using first device.")
+            first_device = next(iter(labeled_devices.values()))
+            cv_task = asyncio.create_task(
+                stream_cv_visualization(first_device, labeled_surface_layouts, apriltag_params)
+            )
+            stream_tasks.append(cv_task)
 
         print("All streams started")
         print("Press Ctrl+C to stop the streams")
@@ -240,4 +258,100 @@ async def stream_gaze_mapped_data_to_ws(labeled_device: LabeledDevice, labeled_s
         import traceback
         traceback.print_exc()
         print(f"❌ Unexpected error in stream_gaze_mapped_data_to_ws: {e}")
+        return
+
+
+async def stream_cv_visualization(labeled_device: LabeledDevice, labeled_surface_layouts: Dict[int, SurfaceLayoutLabeled], apriltag_params: Dict[str, Any]):
+    """
+    Lightweight CV visualization that runs in parallel with WebSocket streaming.
+    
+    Uses a separate video stream optimized for visualization at ~15 FPS
+    to avoid impacting the main gaze mapping performance.
+    """
+    from gazedeck.core.cv_visualizer import CVVisualizer
+    from gazedeck.core.camera_distortion import CameraDistortion
+    from gazedeck.core.device_senzors import get_sensor_urls
+    from gazedeck.core.queues import enqueue_sensor_data, get_most_recent_item
+    from gazedeck.core.marker_detection import SimpleMarkerDetector
+    from pupil_labs.realtime_api import receive_video_frames
+    from pupil_labs.realtime_api.streaming import VideoFrame
+    
+    try:
+        print(f"🎯 Starting CV visualization for device: {labeled_device.emission_id} {labeled_device.label}")
+        print("Press ESC to stop visualization")
+        
+        # Get sensor URLs
+        sensor_gaze_url, sensor_video_url, sensor_imu_url = await get_sensor_urls(labeled_device)
+        
+        # Initialize lightweight video queue (smaller for CV)
+        MAX_QUEUE_VIDEO_SIZE = 3  # Smaller queue for faster processing
+        queue_video: asyncio.Queue[VideoFrame] = asyncio.Queue(maxsize=MAX_QUEUE_VIDEO_SIZE)
+        
+        # Start video collection task
+        asyncio.create_task(
+            enqueue_sensor_data(
+                receive_video_frames(sensor_video_url, run_loop=True),
+                queue_video,
+                f"CV video (device: {labeled_device.emission_id})",
+            )
+        )
+        
+        # Initialize lightweight components for CV only
+        camera_distortion = CameraDistortion(labeled_device.camera_calibration)
+        visualizer = CVVisualizer()
+        detector = SimpleMarkerDetector(apriltag_params)
+        
+        print("🔄 Starting CV visualization loop...")
+        
+        frame_count = 0
+        try:
+            while True:
+                # Check if user wants to close visualization
+                if visualizer.should_close():
+                    print("🛑 Closing CV visualization")
+                    break
+                
+                try:
+                    # Get latest video frame
+                    video_ts, video_frame = await asyncio.wait_for(
+                        get_most_recent_item(queue_video), timeout=0.2
+                    )
+                    
+                    frame_count += 1
+                    
+                    # Process every 2nd frame to reduce CPU load (15 FPS instead of 30)
+                    if frame_count % 2 != 0:
+                        continue
+                    
+                    # Get frame data for visualization
+                    if hasattr(video_frame, 'bgr_pixels'):
+                        frame_bgr = video_frame.bgr_pixels
+                    elif hasattr(video_frame, 'bgr_buffer'):
+                        frame_bgr = video_frame.bgr_buffer()
+                    else:
+                        continue
+                    
+                    # Lightweight marker detection for visualization only
+                    detected_markers = await asyncio.to_thread(
+                        detector.detect_markers, frame_bgr, camera_distortion
+                    )
+                    
+                    # Show visualization (no surface tracking for CV - just markers)
+                    visualizer.show_frame(frame_bgr, detected_markers, None)
+                    
+                except asyncio.TimeoutError:
+                    # No new frame available, continue
+                    pass
+                except Exception as e:
+                    print(f"⚠️  CV frame processing error: {e}")
+                    
+                await asyncio.sleep(0.033)  # ~30 FPS timing
+                
+        finally:
+            visualizer.cleanup()
+            
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"❌ Unexpected error in stream_cv_visualization: {e}")
         return

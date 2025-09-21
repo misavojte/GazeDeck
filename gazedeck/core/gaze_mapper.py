@@ -73,6 +73,9 @@ class GazeMapper:
         except Exception:
             # If detection fails, use empty list
             detected_markers = []
+        
+        # Store detected markers for visualization access
+        self._detected_markers = detected_markers
         source_frame_timestamp = frame.timestamp_unix_seconds
 
         # Track surfaces using CV2 homography
@@ -133,3 +136,8 @@ class GazeMapper:
     def detected_markers(self) -> List[DetectedMarker]:
         """Get detected markers"""
         return self._detected_markers.copy()
+    
+    @property
+    def surface_locations(self) -> Dict[int, SurfaceLocation]:
+        """Get surface locations"""
+        return self._surface_locations.copy()

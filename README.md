@@ -137,7 +137,30 @@ python -m gazedeck stream \
 - **`--apriltag-quad-decimate`**: Lower values (0.5-1.0) improve detection at the cost of speed
 - **`--apriltag-decode-sharpening`**: Increase (0.1-1.0) for noisy or low-contrast markers
 - **`--apriltag-quad-sigma`**: Gaussian blur for quad detection (0.0-2.0)
-- **`--apriltag-debug`**: Enable debug output (0=off, 1=basic, 2=detailed)
+
+#### Live CV Visualization
+
+Enable real-time OpenCV visualization to see detected AprilTags and surfaces:
+
+```bash
+# Stream with live video visualization (runs in parallel with WebSocket streaming)
+python -m gazedeck stream --cv
+```
+
+**CV Visualization Features**:
+- **Parallel Processing**: Runs alongside WebSocket streaming without blocking
+- **Optimized Performance**: Lightweight 15 FPS visualization to minimize delay
+- **Colored Tag Edges**: Each AprilTag edge is color-coded for easy identification
+  - **Green**: Top edge
+  - **Blue**: Right edge  
+  - **Red**: Bottom edge
+  - **Yellow**: Left edge
+- **Tag ID Display**: Large numbers show the tag ID at the center of each tag
+- **Confidence Scores**: Detection confidence displayed below each tag ID
+- **Real-time Processing**: Live visualization of the eye tracker's video feed
+- **ESC to Exit**: Press the ESC key to close the visualization window
+
+The visualization works with the original distorted camera coordinates, ensuring accurate overlay on the live video feed. WebSocket streaming continues normally even with CV visualization enabled.
 
 ### Generated Files Structure
 

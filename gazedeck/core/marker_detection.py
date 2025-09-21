@@ -16,10 +16,12 @@ class DetectedMarker(NamedTuple):
         tag_id: Unique marker ID
         corners: List of (x, y) corner coordinates (undistorted)
         confidence: Detection confidence score (decision_margin from AprilTag)
+        original_corners: List of (x, y) corner coordinates (original distorted) for visualization
     """
     tag_id: int
     corners: Tuple[Tuple[float, float], ...]
     confidence: float
+    original_corners: Tuple[Tuple[float, float], ...]
 
 TAG_FAMILY = "tag36h11"
 
@@ -78,7 +80,8 @@ class SimpleMarkerDetector:
             result.append(DetectedMarker(
                 tag_id=marker.tag_id,
                 corners=tuple(tuple(corner) for corner in undistorted_corners.tolist()),
-                confidence=marker.decision_margin
+                confidence=marker.decision_margin,
+                original_corners=tuple(tuple(corner) for corner in corners)
             ))
 
         return result
