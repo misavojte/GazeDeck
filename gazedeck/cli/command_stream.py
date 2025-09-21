@@ -86,7 +86,7 @@ def add_stream_parser(subparsers) -> argparse.ArgumentParser:
     stream_parser.add_argument(
         "--gaze-filter-alpha",
         type=float,
-        default=1,
+        default=0.8,
         help="Exponential smoothing alpha for gaze filter (0.0-1.0, default: 0.25). Lower = smoother, higher = more responsive.",
     )
 
@@ -192,7 +192,7 @@ async def execute_stream(args: argparse.Namespace):
                 print("⚠️  CV visualization currently supports single device only. Using first device.")
             first_device = next(iter(labeled_devices.values()))
             cv_task = asyncio.create_task(
-                stream_cv_visualization(first_device, labeled_surface_layouts, apriltag_params)
+                stream_cv_visualization(first_device, labeled_surface_layouts, apriltag_params, layouts)
             )
             stream_tasks.append(cv_task)
 
@@ -261,12 +261,14 @@ async def stream_gaze_mapped_data_to_ws(labeled_device: LabeledDevice, labeled_s
         return
 
 
-async def stream_cv_visualization(labeled_device: LabeledDevice, labeled_surface_layouts: Dict[int, SurfaceLayoutLabeled], apriltag_params: Dict[str, Any]):
+async def stream_cv_visualization(labeled_device: LabeledDevice, labeled_surface_layouts: Dict[int, SurfaceLayoutLabeled], apriltag_params: Dict[str, Any], surface_layouts: Dict[int, SurfaceLayout]):
     """
     Lightweight CV visualization that runs in parallel with WebSocket streaming.
-    
+
     Uses a separate video stream optimized for visualization at ~15 FPS
     to avoid impacting the main gaze mapping performance.
+
+    Shows detected markers with surface boundaries for better spatial awareness.
     """
     from gazedeck.core.cv_visualizer import CVVisualizer
     from gazedeck.core.camera_distortion import CameraDistortion
@@ -336,8 +338,8 @@ async def stream_cv_visualization(labeled_device: LabeledDevice, labeled_surface
                         detector.detect_markers, frame_bgr, camera_distortion
                     )
                     
-                    # Show visualization (no surface tracking for CV - just markers)
-                    visualizer.show_frame(frame_bgr, detected_markers, None)
+                    # Show visualization with surface boundaries
+                    visualizer.show_frame(frame_bgr, detected_markers, None, surface_layouts)
                     
                 except asyncio.TimeoutError:
                     # No new frame available, continue
