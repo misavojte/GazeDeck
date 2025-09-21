@@ -10,9 +10,9 @@ class SurfaceLocation(NamedTuple):
     """
     Surface location data with homography matrix and timestamp.
 
-    Immutable for efficient caching and memory usage.
+    PERFORMANCE: Immutable for efficient caching and memory usage.
     """
-    homography: np.ndarray  # 3x3 homography matrix
+    homography: Optional[np.ndarray]  # 3x3 homography matrix or None
     timestamp: float  # Unix timestamp from video frame
 
 def _reorder_corners_top_left_ccw(corners: list) -> list:
@@ -137,7 +137,7 @@ def project_gaze_to_surface(gaze_point: tuple[float, float], homography: np.ndar
 
     return normalized_x, normalized_y
 
-def track_surfaces(detected_markers: List[DetectedMarker], surface_definitions: Dict[int, Dict], timestamp: float) -> Dict[int, Optional[SurfaceLocation]]:
+def track_surfaces(detected_markers: List[DetectedMarker], surface_definitions: Dict[int, Dict], timestamp: float) -> Dict[int, SurfaceLocation]:
     """
     Track surfaces by calculating homography for each surface.
 
@@ -147,14 +147,11 @@ def track_surfaces(detected_markers: List[DetectedMarker], surface_definitions: 
         timestamp: Unix timestamp from the video frame
 
     Returns:
-        Dict mapping emission_id -> SurfaceLocation (or None if no valid homography)
+        Dict mapping emission_id -> SurfaceLocation with homography and timestamp
     """
     locations = {}
     for emission_id, surface_data in surface_definitions.items():
         homography = calculate_surface_homography(detected_markers, surface_data, timestamp)
-        if homography is not None:
-            locations[emission_id] = SurfaceLocation(homography, timestamp)
-        else:
-            locations[emission_id] = None
+        locations[emission_id] = SurfaceLocation(homography, timestamp)
 
     return locations

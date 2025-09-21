@@ -159,7 +159,7 @@ class GazeMapper:
         # Map gaze to each surface using homography
         mapped_gaze = {}
         for emission_id, surface_location in self._surface_locations.items():
-            if surface_location is None:
+            if surface_location.homography is None:
                 mapped_gaze[emission_id] = []
                 continue
 
