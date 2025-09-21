@@ -41,30 +41,22 @@ def _reorder_corners_top_left_ccw(corners: list) -> list:
 
 def calculate_surface_homography(detected_markers: List[DetectedMarker], surface_data: Dict, timestamp: float) -> Optional[np.ndarray]:
     """
-    Calculate homography matrix for surface using detected markers with 3D pose validation.
-
-    POSE-ENHANCED MODE: Uses 3D pose information to validate marker reliability
-    and create more accurate homography. Returns None immediately if poses are inconsistent.
+    Calculate homography matrix for surface using detected markers.
 
     Args:
-        detected_markers: List of DetectedMarker instances with mandatory pose data
+        detected_markers: List of DetectedMarker instances
         surface_data: Surface definition with 'markers' mapping tag_id -> corners
         timestamp: Unix timestamp from the video frame
 
     Returns:
-        3x3 homography matrix or None if insufficient/unreliable markers detected
+        3x3 homography matrix or None if insufficient markers detected
     """
-    # Extract marker corners and validate poses for this surface
+    # Extract marker corners for this surface
     all_marker_points = []
     all_surface_points = []
-    pose_errors = []
 
     for marker in detected_markers:
         if marker.tag_id in surface_data['markers']:
-            # POSE VALIDATION: Check if pose estimation is reliable
-            if marker.pose_err > 0.1:  # Reject markers with high pose error
-                continue
-                
             # Get corresponding points for this marker
             marker_corners = _reorder_corners_top_left_ccw(list(marker.corners))
             surface_corners = _reorder_corners_top_left_ccw(list(surface_data['markers'][marker.tag_id]))
@@ -72,15 +64,9 @@ def calculate_surface_homography(detected_markers: List[DetectedMarker], surface
             if len(marker_corners) == len(surface_corners):
                 all_marker_points.extend(marker_corners)
                 all_surface_points.extend(surface_corners)
-                pose_errors.append(marker.pose_err)
 
     # STRICT: Need at least 4 corresponding point pairs for reliable homography
     if len(all_marker_points) < 4:
-        return None
-
-    # POSE VALIDATION: Check average pose error across all markers
-    avg_pose_error = np.mean(pose_errors)
-    if avg_pose_error > 0.05:  # Reject if average pose error too high
         return None
 
     # Convert to numpy arrays with correct shape for cv2.findHomography
@@ -88,21 +74,20 @@ def calculate_surface_homography(detected_markers: List[DetectedMarker], surface
     surface_points = np.array(all_surface_points, dtype=np.float32)  # Shape: (N, 2)
 
     # Calculate homography matrix with RANSAC to handle outliers
-    # Use stricter parameters for better reliability during movement
     homography, mask = cv2.findHomography(
-        marker_points, 
+        marker_points,
         surface_points,
         method=cv2.RANSAC,
-        ransacReprojThreshold=2.0,  # Stricter threshold with pose validation
-        maxIters=3000,  # More iterations for better accuracy
-        confidence=0.995  # Higher confidence requirement
+        ransacReprojThreshold=2.0,
+        maxIters=1000,
+        confidence=0.995
     )
-    
-    # STRICT: If RANSAC couldn't find a good homography, return None
+
+    # Check if RANSAC found a good homography
     if homography is None or mask is None:
         return None
-        
-    # STRICT: Check if enough inliers were found (at least 80% of points with pose validation)
+
+    # Check if enough inliers were found (at least 80% of points)
     inlier_ratio = np.sum(mask) / len(mask) if len(mask) > 0 else 0
     if inlier_ratio < 0.8:
         return None
