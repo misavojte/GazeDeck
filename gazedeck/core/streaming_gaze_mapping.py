@@ -11,7 +11,6 @@ from pupil_labs.realtime_api import (
 
 # python
 import asyncio
-from datetime import datetime
 from typing import Dict, Optional, Any
 from typing import NamedTuple
 
@@ -29,7 +28,7 @@ class GazeMappedSurfaceResult(NamedTuple):
     y: float
 
 class GazeMappedResult(NamedTuple):
-    timestamp: datetime
+    timestamp: float
     surface_gaze: Dict[str, Optional[GazeMappedSurfaceResult]] # key is surface label, value is GazeMappedSurfaceResult
 
 async def stream_gaze_mapped_data(labeled_device: LabeledDevice, surface_layouts: Dict[int, SurfaceLayoutLabeled], apriltag_params: Dict[str, Any], gaze_filter_alpha: float = 0.25) -> asyncio.Queue[GazeMappedResult]:

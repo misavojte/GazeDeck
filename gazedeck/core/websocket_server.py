@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import asyncio
 from typing import Set, Tuple
-from datetime import datetime
 import websockets
 from websockets.server import WebSocketServerProtocol
 import contextlib
@@ -114,7 +113,7 @@ def broadcast_nowait(msg: str | bytes) -> None:
         pass
 
 
-def broadcast_gaze_data(device_id: int, surface_id: int, x: float, y: float, timestamp: datetime) -> None:
+def broadcast_gaze_data(device_id: int, surface_id: int, x: float, y: float, timestamp: float) -> None:
     """
     High-performance gaze data broadcast using binary serialization.
 

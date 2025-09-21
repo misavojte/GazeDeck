@@ -3,6 +3,7 @@
 
 from typing import Dict, List, NamedTuple, Optional, Any    
 from pupil_labs.realtime_api import GazeData
+from pupil_labs.realtime_api.streaming import VideoFrame
 
 from .camera_distortion import CameraDistortion
 from .marker_detection import SimpleMarkerDetector, DetectedMarker
@@ -102,12 +103,12 @@ class GazeMapper:
 
         return emission_id
 
-    def process_scene(self, frame):
+    def process_scene(self, frame: VideoFrame):
         """Process video frame to detect markers and track surfaces"""
         if hasattr(frame, 'bgr_pixels'):
-            frame = frame.bgr_pixels
+            frame_bgr = frame.bgr_pixels
         elif hasattr(frame, 'bgr_buffer'):
-            frame = frame.bgr_buffer()
+            frame_bgr = frame.bgr_buffer()
 
         # ULTRA OPTIMIZED: Multi-size detection with pre-computed data
         all_markers = []
@@ -117,7 +118,7 @@ class GazeMapper:
             try:
                 # Detect markers for this specific size with immediate ID filtering
                 size_markers = self._detector.detect_markers(
-                    frame,
+                    frame_bgr,
                     self._camera,
                     markers_to_detect.size,
                     markers_to_detect.ids  # Already a tuple, no conversion needed!
@@ -133,10 +134,11 @@ class GazeMapper:
             if marker.tag_id not in unique_markers or marker.confidence > unique_markers[marker.tag_id].confidence:
                 unique_markers[marker.tag_id] = marker
 
-        self._detected_markers = list(unique_markers.values())
+        detected_markers = list(unique_markers.values())
+        source_frame_timestamp = frame.timestamp_unix_seconds # TODO: use later
 
         # Track surfaces using CV2 homography with pose validation
-        self._surface_locations = track_surfaces(self._detected_markers, self._surfaces)
+        self._surface_locations = track_surfaces(detected_markers, self._surfaces)
 
     def process_gaze(self, gaze: GazeData) -> SimpleMapperResult:
         """

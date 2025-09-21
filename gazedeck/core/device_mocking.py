@@ -19,10 +19,9 @@ Requires: pynput (pip install pynput)
 from __future__ import annotations
 
 import asyncio
-import json
 import random
 import threading
-from datetime import datetime
+import time
 from typing import Dict, Optional, Iterable
 
 from pynput import mouse
@@ -187,7 +186,7 @@ class MockTracker:
             base_x, base_y = self.current_position
 
         # Generate timestamp
-        timestamp = datetime.now()
+        timestamp = time.time()
 
         # Create surface gaze data with noise
         surface_gaze = {}

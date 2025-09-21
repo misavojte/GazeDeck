@@ -4,7 +4,6 @@
 import asyncio
 from typing import TypeVar, Tuple, AsyncIterator
 from asyncio import QueueEmpty, QueueFull
-from datetime import datetime
 
 # Generic type for sensor data items
 T = TypeVar('T')
@@ -15,12 +14,12 @@ async def enqueue_sensor_data(sensor: AsyncIterator[T], queue: asyncio.Queue[T],
     async for datum in sensor:
         count += 1
         try:
-            queue.put_nowait((datum.datetime, datum))
+            queue.put_nowait((datum.timestamp_unix_seconds, datum))
         except QueueFull:
             # Queue full - drop this datum silently for performance
             pass
 
-async def get_most_recent_item(queue: asyncio.Queue[T]) -> Tuple[datetime, T]:
+async def get_most_recent_item(queue: asyncio.Queue[T]) -> Tuple[float, T]:
     item = await queue.get()
     while True:
         try:
@@ -30,7 +29,7 @@ async def get_most_recent_item(queue: asyncio.Queue[T]) -> Tuple[datetime, T]:
         else:
             item = next_item
 
-async def get_closest_item(queue: asyncio.Queue[T], timestamp: datetime) -> Tuple[datetime, T]:
+async def get_closest_item(queue: asyncio.Queue[T], timestamp: float) -> Tuple[float, T]:
     item_ts, item = await queue.get()
     # assumes monotonically increasing timestamps
     if item_ts > timestamp:

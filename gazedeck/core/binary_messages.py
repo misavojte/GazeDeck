@@ -12,7 +12,6 @@ Design:
 import struct
 import math
 from typing import Tuple
-from datetime import datetime
 
 # Message format constants
 MESSAGE_FORMAT = 'iiffd'  # device_id, surface_id, x, y, timestamp
@@ -24,7 +23,7 @@ def serialize_gaze_message(
     surface_id: int,
     x: float,
     y: float,
-    timestamp: datetime
+    timestamp: float
 ) -> bytes:
     """
     Serialize gaze data to binary format.
@@ -48,7 +47,7 @@ def serialize_gaze_message(
         surface_id,
         x,
         y,
-        timestamp.timestamp()  # Convert to Unix timestamp (float64)
+        timestamp  # Already Unix timestamp (float64)
     )
 
 
@@ -69,7 +68,7 @@ def is_valid_coordinates(x: float, y: float) -> bool:
     return not (math.isnan(x) or math.isnan(y))
 
 
-def deserialize_gaze_message(buffer: bytes) -> Tuple[int, int, float, float, datetime]:
+def deserialize_gaze_message(buffer: bytes) -> Tuple[int, int, float, float, float]:
     """
     Deserialize binary gaze message (primarily for testing/debugging).
 
@@ -80,4 +79,4 @@ def deserialize_gaze_message(buffer: bytes) -> Tuple[int, int, float, float, dat
         Tuple of (device_id, surface_id, x, y, timestamp)
     """
     device_id, surface_id, x, y, timestamp_unix = struct.unpack(MESSAGE_FORMAT, buffer)
-    return device_id, surface_id, x, y, datetime.fromtimestamp(timestamp_unix)
+    return device_id, surface_id, x, y, timestamp_unix
