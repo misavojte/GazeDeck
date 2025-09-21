@@ -8,6 +8,8 @@ import pupil_apriltags
 from typing import List, Dict, Any, Optional
 from typing import Tuple, NamedTuple
 
+from gazedeck.core.camera_distortion import CameraDistortion
+
 class DetectedMarker(NamedTuple):
     """
     Detected marker results with type safety, no pose or size data.
@@ -56,7 +58,7 @@ class SimpleMarkerDetector:
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         return self.detect_from_gray(gray, camera_distortion)
 
-    def detect_from_gray(self, gray: npt.NDArray[np.uint8], camera_distortion) -> List[DetectedMarker]:
+    def detect_from_gray(self, gray: npt.NDArray[np.uint8], camera_distortion: CameraDistortion) -> List[DetectedMarker]:
         """
         Detect markers from grayscale image.
 
@@ -69,10 +71,17 @@ class SimpleMarkerDetector:
         """
         # Detect markers
         markers = self._detector.detect(gray)
+        
+        if not markers:
+            return []
 
+        # Batch undistort all corners at once for better performance
+        all_corners = [marker.corners for marker in markers]
+        all_undistorted = camera_distortion.undistort_points(all_corners)
+        
         # Process all detected markers
         result = []
-        for marker in markers:
+        for i, marker in enumerate(markers):
             # Extract corners and undistort them
             # IMPORTANT!!!
             # AprilTag detectors return corners that wrap counter-clock wise around the tag.
@@ -81,11 +90,11 @@ class SimpleMarkerDetector:
             # 2 top-right
             # 3 top-left
             # no need to reorder them!!!
-            undistorted_corners = camera_distortion.undistort_points(marker.corners)
+            undistorted_corners = all_undistorted[i * 4:(i + 1) * 4]
 
             result.append(DetectedMarker(
                 tag_id=marker.tag_id,
-                corners=tuple(tuple(corner) for corner in undistorted_corners.tolist()),
+                corners=tuple(tuple(corner) for corner in undistorted_corners),
                 confidence=marker.decision_margin,
                 original_corners=tuple(tuple(corner) for corner in marker.corners)
             ))
