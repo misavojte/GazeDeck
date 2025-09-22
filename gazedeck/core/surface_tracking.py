@@ -3,7 +3,7 @@
 
 import cv2
 import numpy as np
-from typing import List, Dict, Optional, NamedTuple
+from typing import List, Dict, Optional, NamedTuple, Any
 from .marker_detection import DetectedMarker
 
 class SurfaceLocation(NamedTuple):
@@ -16,13 +16,13 @@ class SurfaceLocation(NamedTuple):
     timestamp: float  # Unix timestamp from video frame
 
 
-def calculate_surface_homography(detected_markers: List[DetectedMarker], surface_data: Dict, timestamp: float) -> Optional[np.ndarray]:
+def calculate_surface_homography(detected_markers: List[DetectedMarker], surface_data: Dict[str, Any], timestamp: float) -> Optional[np.ndarray]:
     """
     Calculate homography matrix for surface using detected markers.
 
     Args:
         detected_markers: List of DetectedMarker instances
-        surface_data: Surface definition with 'markers' mapping tag_id -> corners
+        surface_data: Surface definition with 'markers' mapping tag_id -> np.ndarray corners
         timestamp: Unix timestamp from the video frame
 
     Returns:
@@ -34,9 +34,9 @@ def calculate_surface_homography(detected_markers: List[DetectedMarker], surface
 
     for marker in detected_markers:
         if marker.tag_id in surface_data['markers']:
-            # Get corresponding points for this marker
-            marker_corners = (list(marker.corners))
-            surface_corners = list(surface_data['markers'][marker.tag_id])
+            # Get corresponding points for this marker (already numpy arrays)
+            marker_corners = np.array(marker.corners, dtype=np.float32)
+            surface_corners = surface_data['markers'][marker.tag_id]  # Already np.ndarray
 
             if len(marker_corners) == len(surface_corners):
                 all_marker_points.extend(marker_corners)

@@ -1,7 +1,8 @@
 # gazedeck/core/gaze_mapper.py
 # Simplified gaze mapper using emission_ids and modular components
 
-from typing import Dict, List, NamedTuple, Optional, Any    
+import numpy as np
+from typing import Dict, List, NamedTuple, Optional, Any
 from pupil_labs.realtime_api import GazeData
 from pupil_labs.realtime_api.streaming import VideoFrame
 
@@ -47,11 +48,14 @@ class GazeMapper:
 
         Returns:
             The emission_id used
+
+        Note:
+            Corners are internally converted to numpy arrays for performance
         """
         # Convert TagInfo to the format expected by surface tracking
         converted_markers = {}
         for tag_id, tag_info in tags.items():
-            converted_markers[tag_id] = list(tag_info.corners)
+            converted_markers[tag_id] = np.array(tag_info.corners, dtype=np.float32)
 
         self._surfaces[emission_id] = {
             'markers': converted_markers,
@@ -118,7 +122,17 @@ class GazeMapper:
         self._surface_locations = {}
 
     def replace_surface(self, emission_id: int, new_marker_verts: dict, new_surface_size: tuple[float, float]) -> int:
-        """Replace surface definition"""
+        """
+        Replace surface definition.
+
+        Args:
+            emission_id: Surface ID to replace
+            new_marker_verts: Dict mapping tag_id -> np.ndarray corners (4x2 float32 array)
+            new_surface_size: (width, height) in pixels
+
+        Returns:
+            The emission_id used, or None if surface not found
+        """
         if emission_id in self._surfaces:
             self._surfaces[emission_id]['markers'] = new_marker_verts
             self._surfaces[emission_id]['size'] = new_surface_size
