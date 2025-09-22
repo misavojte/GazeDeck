@@ -44,7 +44,7 @@ pip install -e .
 Or install dependencies manually:
 
 ```bash
-pip install pupil-labs-realtime-api==1.6.2 websockets>=12.0 Pillow>=10.0 opencv-python>=4.8.0 PyYAML>=6.0
+pip install pupil-labs-realtime-api==1.6.2 websockets>=12.0 opencv-python>=4.8.0 PyYAML>=6.0
 ```
 
 ## Quick Start
