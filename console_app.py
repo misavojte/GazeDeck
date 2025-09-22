@@ -10,13 +10,6 @@ import argparse
 import asyncio
 import signal
 
-try:
-    from colorama import init, Fore, Back, Style
-    COLORAMA_AVAILABLE = True
-    init(autoreset=True)  # Initialize colorama
-except ImportError:
-    COLORAMA_AVAILABLE = False
-
 # Add the current directory to Python path so we can import gazedeck
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -45,28 +38,24 @@ from gazedeck.cli.command_mock import (
 
 def print_intro():
     """Print a clean intro screen with description and commands."""
-    if COLORAMA_AVAILABLE:
-        light_cyan = Fore.LIGHTCYAN_EX
-        reset = Style.RESET_ALL
-    else:
-        light_cyan = reset = ""
-
-    # Title
-    print(f"{light_cyan}GAZEDECK CONSOLE APPLICATION{reset}")
-    print(f"{light_cyan}{'─' * 30}{reset}")
+    # Title section
+    print("=" * 50)
+    print("GAZEDECK CONSOLE APPLICATION")
+    print("=" * 50)
+    print()
 
     # Subtitle
-    print(f"{light_cyan}Real-time Screen Gaze Tracking with Pupil Labs{reset}")
+    print("Real-time Screen Gaze Tracking with Pupil Labs")
     print()
 
     # Description
-    print(f"{light_cyan}Interactive console for Gazedeck CLI commands.{reset}")
-    print(f"{light_cyan}No Python environment required - standalone executable.{reset}")
+    print("Interactive console for Gazedeck CLI commands.")
+    print("No Python environment required - standalone executable.")
     print()
 
     # Commands section
-    print(f"{light_cyan}BASIC COMMANDS:{reset}")
-    print(f"{light_cyan}{'─' * 15}{reset}")
+    print("BASIC COMMANDS:")
+    print("-" * 20)
 
     commands = [
         "gazedeck --help                    Show all available commands",
@@ -78,17 +67,18 @@ def print_intro():
     ]
 
     for cmd in commands:
-        print(f"{light_cyan}{cmd}{reset}")
+        print(f"  {cmd}")
     print()
 
     # Authors section
-    print(f"{light_cyan}AUTHORS:{reset}")
-    print(f"{light_cyan}{'─' * 8}{reset}")
-    print(f"{light_cyan}Vojtechovska, M., Popelka, S. at Department of Geoinformatics, Palacky University Olomouc{reset}")
+    print("AUTHORS:")
+    print("-" * 10)
+    print("Vojtechovska, M., Popelka, S.")
+    print("Department of Geoinformatics, Palacky University Olomouc")
     print()
 
     # Instructions
-    print(f"{light_cyan}Type your commands below or 'exit' to quit:{reset}")
+    print("Type your commands below or 'exit' to quit:")
     print()
 
 
