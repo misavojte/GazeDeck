@@ -60,10 +60,6 @@ def draw_tag_visualization(frame: npt.NDArray[np.uint8],
             corners_distorted = np.array(marker.original_corners, dtype=np.float32)
             corners_int = corners_distorted.astype(int)
             
-            # Debug: show marker info (reduced logging)
-            if marker.tag_id % 10 == 0:  # Only log every 10th marker to reduce spam
-                print(f"🔍 Marker {marker.tag_id}: confidence={marker.confidence:.2f}")
-            
         except Exception as e:
             print(f"⚠️  Error processing marker {marker.tag_id}: {e}")
             continue

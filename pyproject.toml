@@ -11,7 +11,8 @@ dependencies = [
     "websockets>=12.0,<16.0",
     "opencv-python>=4.8.0",
     "PyYAML>=6.0",
-    "pynput>=1.7.0"
+    "pynput>=1.7.0",
+    "pupil-apriltags==1.0.4.post11"
 ]
 
 [project.scripts]

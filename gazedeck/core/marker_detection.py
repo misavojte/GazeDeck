@@ -76,8 +76,18 @@ class SimpleMarkerDetector:
             return []
 
         # Batch undistort all corners at once for better performance
-        all_corners = [marker.corners for marker in markers]
-        all_undistorted = camera_distortion.undistort_points(all_corners)
+        # OpenCV expects a flat list of 2D points, not a list of quads
+        flat_corners = []
+        for marker in markers:
+            # marker.corners is 4x2 array-like
+            for corner in marker.corners:
+                flat_corners.append((float(corner[0]), float(corner[1])))
+
+        # Guard: if detection returned zero points for any reason
+        if len(flat_corners) == 0:
+            return []
+
+        all_undistorted = camera_distortion.undistort_points(flat_corners)
         
         # Process all detected markers
         result = []
