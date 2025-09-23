@@ -29,6 +29,7 @@ BROADCAST_QUEUE_MAX = 1024   # global buffer; drop beyond this
 
 _clients: Set[asyncio.Queue] = set()
 _broadcast_q: asyncio.Queue = asyncio.Queue(maxsize=BROADCAST_QUEUE_MAX)
+_client_lock: asyncio.Lock = asyncio.Lock()
 
 async def _client_handler(ws: WebSocketServerProtocol) -> None:
     """
@@ -36,8 +37,8 @@ async def _client_handler(ws: WebSocketServerProtocol) -> None:
     We don't read from ws; sending raises if the client disconnects.
     """
     q: asyncio.Queue = asyncio.Queue(maxsize=CLIENT_QUEUE_MAX)
-    _clients.add(q)
-    print(f"👤 New WebSocket client connected. Total clients: {len(_clients)}")
+    async with _client_lock:
+        _clients.add(q)
     try:
         while True:
             msg = await q.get()
@@ -46,23 +47,32 @@ async def _client_handler(ws: WebSocketServerProtocol) -> None:
         # ConnectionClosed or any send error → drop client
         pass
     finally:
-        _clients.discard(q)
-        print(f"👋 WebSocket client removed. Total clients: {len(_clients)}")
+        async with _client_lock:
+            _clients.discard(q)
 
 async def _broadcaster() -> None:
     """
-    Fans out messages from the global queue to each client queue.
+    Fans out messages from the global queue to each client queue in parallel.
     Drops per-client if its queue is full (keeps fast clients fast).
     """
-    print("🎙️ Broadcaster task started")
     while True:
         msg = await _broadcast_q.get()
-        for q in tuple(_clients):
-            try:
-                q.put_nowait(msg)
-            except asyncio.QueueFull:
-                # drop for this client; keeps overall throughput high
-                pass
+        # Parallel fan-out: send to all clients simultaneously
+        async with _client_lock:
+            client_queues = _clients.copy()
+        if client_queues:  # Only create tasks if we have clients
+            tasks = []
+            for q in client_queues:
+                tasks.append(_send_to_client(q, msg))
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+async def _send_to_client(q: asyncio.Queue, msg: bytes) -> None:
+    """Send message to a single client queue."""
+    try:
+        q.put_nowait(msg)
+    except asyncio.QueueFull:
+        # drop for this client; keeps overall throughput high
+        pass
 
 async def start_ws_server(host: str = "0.0.0.0", port: int = 8765) -> Tuple[websockets.server.Serve, asyncio.Task]:
     """
@@ -95,11 +105,12 @@ async def _safe_client_handler(ws: WebSocketServerProtocol) -> None:
             # Try to get more info about the request
             try:
                 remote_addr = ws.remote_address
-                print(f"ℹ️ Ignored HTTP request from {remote_addr} to WebSocket endpoint")
+                # Log without blocking (could use logging module if available)
             except:
-                print(f"ℹ️ Ignored invalid HTTP request to WebSocket endpoint")
+                pass
         else:
-            print(f"⚠️ WebSocket InvalidMessage error: {e}")
+            # Log without blocking (could use logging module if available)
+            pass
 
 def broadcast_nowait(msg: str | bytes) -> None:
     """
