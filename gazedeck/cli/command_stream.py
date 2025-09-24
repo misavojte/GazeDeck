@@ -265,17 +265,16 @@ async def stream_gaze_mapped_data_to_ws(labeled_device: LabeledDevice, labeled_s
 
 async def stream_cv_visualization(labeled_device: LabeledDevice, labeled_surface_layouts: Dict[int, SurfaceLayoutLabeled], apriltag_params: Dict[str, Any], surface_layouts: Dict[int, SurfaceLayout]):
     """
-    Lightweight CV visualization that runs in parallel with WebSocket streaming.
+    CV visualization that is fully isolated from gaze mapping.
 
-    Uses a separate video stream optimized for visualization at ~15 FPS
-    to avoid impacting the main gaze mapping performance.
+    Design goals for zero interference:
+    - Dedicated video subscription and queue for CV frames (no sharing with gaze mapping)
+    - Separate GUI thread for all OpenCV window operations
+    - Dedicated ThreadPoolExecutor for CV compute so it never consumes the default
+      asyncio thread pool used by gaze mapping
+    - Non-blocking queues with frame dropping to avoid backpressure
 
-    Shows detected markers with surface boundaries for better spatial awareness.
-
-    Performance optimized with:
-    - Separate GUI thread for all OpenCV operations (non-blocking)
-    - Async frame processing in main event loop
-    - Thread-safe queue for frame passing
+    Only asyncio/threading techniques are used; no FPS throttling or parameter tweaks.
     """
     from gazedeck.core.cv_visualizer import CVVisualizer
     from gazedeck.core.camera_distortion import CameraDistortion
@@ -284,6 +283,7 @@ async def stream_cv_visualization(labeled_device: LabeledDevice, labeled_surface
     from gazedeck.core.marker_detection import SimpleMarkerDetector
     from pupil_labs.realtime_api import receive_video_frames
     from pupil_labs.realtime_api.streaming import VideoFrame
+    import time
 
     try:
         print(f"🎯 Starting CV visualization for device: {labeled_device.emission_id} {labeled_device.label}")
@@ -292,8 +292,8 @@ async def stream_cv_visualization(labeled_device: LabeledDevice, labeled_surface
         # Get sensor URLs
         sensor_gaze_url, sensor_video_url, sensor_imu_url = await get_sensor_urls(labeled_device)
 
-        # Initialize lightweight video queue (smaller for CV)
-        MAX_QUEUE_VIDEO_SIZE = 3  # Smaller queue for faster processing
+        # Initialize independent video queue (small size ensures newest frames)
+        MAX_QUEUE_VIDEO_SIZE = 3
         queue_video: asyncio.Queue[VideoFrame] = asyncio.Queue(maxsize=MAX_QUEUE_VIDEO_SIZE)
 
         # Start video collection task
@@ -312,6 +312,10 @@ async def stream_cv_visualization(labeled_device: LabeledDevice, labeled_surface
         # Thread-safe queue for passing frames to GUI thread
         frame_queue: queue.Queue = queue.Queue(maxsize=2)  # Small queue to prevent memory buildup
         stop_event = threading.Event()
+
+        # Dedicated executor for CV detection so gaze mapping's default threadpool remains unaffected
+        from concurrent.futures import ThreadPoolExecutor
+        cv_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix=f"CV-Exec-{labeled_device.emission_id}")
 
         print("🔄 Starting CV visualization loop...")
 
@@ -352,7 +356,12 @@ async def stream_cv_visualization(labeled_device: LabeledDevice, labeled_surface
         gui_thread_instance = threading.Thread(target=gui_thread, daemon=True, name=f"CV-GUI-{labeled_device.emission_id}")
         gui_thread_instance.start()
 
-        frame_count = 0
+        # Non-blocking detection pipeline state
+        inflight_future = None
+        inflight_frame_bgr = None
+        inflight_ts = 0.0
+        MAX_FRAME_AGE_SEC = 0.2  # Drop stale frames to prevent latency accumulation
+
         try:
             while not stop_event.is_set():
                 try:
@@ -360,12 +369,6 @@ async def stream_cv_visualization(labeled_device: LabeledDevice, labeled_surface
                     video_ts, video_frame = await asyncio.wait_for(
                         get_most_recent_item(queue_video), timeout=0.1  # Shorter timeout for responsiveness
                     )
-
-                    frame_count += 1
-
-                    # Process every 2nd frame to reduce CPU load (15 FPS instead of 30)
-                    if frame_count % 2 != 0:
-                        continue
 
                     # Get frame data for visualization
                     if hasattr(video_frame, 'bgr_pixels'):
@@ -375,10 +378,18 @@ async def stream_cv_visualization(labeled_device: LabeledDevice, labeled_surface
                     else:
                         continue
 
-                    # Lightweight marker detection for visualization only (in thread pool)
-                    detected_markers = await asyncio.to_thread(
-                        detector.detect_markers, frame_bgr, camera_distortion
-                    )
+                    # Drop frames that are already too old
+                    if (time.time() - video_ts) > MAX_FRAME_AGE_SEC:
+                        continue
+
+                    # If no detection is running, schedule one on the dedicated executor
+                    if inflight_future is None or inflight_future.done():
+                        loop = asyncio.get_running_loop()
+                        inflight_frame_bgr = frame_bgr
+                        inflight_ts = video_ts
+                        inflight_future = loop.run_in_executor(
+                            cv_executor, detector.detect_markers, inflight_frame_bgr, camera_distortion
+                        )
 
                     # Put frame in GUI queue (non-blocking)
                     try:
@@ -400,8 +411,29 @@ async def stream_cv_visualization(labeled_device: LabeledDevice, labeled_surface
                 except Exception as e:
                     print(f"⚠️  CV frame processing error: {e}")
 
+                # If a detection finished, push the latest result to GUI queue
+                if inflight_future is not None and inflight_future.done():
+                    try:
+                        detected_markers = inflight_future.result()
+                    except Exception as e:
+                        detected_markers = []
+                    # If the result became stale during processing, skip showing it
+                    if (time.time() - inflight_ts) <= MAX_FRAME_AGE_SEC:
+                        try:
+                            # Remove old frame if queue is full
+                            while frame_queue.full():
+                                try:
+                                    frame_queue.get_nowait()
+                                except queue.Empty:
+                                    break
+                            frame_queue.put_nowait((inflight_frame_bgr, detected_markers))
+                        except queue.Full:
+                            pass
+                    inflight_future = None
+                    inflight_frame_bgr = None
+
                 # Small sleep to prevent busy waiting
-                await asyncio.sleep(0.01)  # Very short sleep for responsiveness
+                await asyncio.sleep(0.01)
 
         finally:
             # Signal GUI thread to stop
@@ -413,6 +445,12 @@ async def stream_cv_visualization(labeled_device: LabeledDevice, labeled_surface
 
             # Wait for GUI thread to finish
             gui_thread_instance.join(timeout=1.0)
+
+            # Cleanly release CV executor threads
+            try:
+                cv_executor.shutdown(wait=False)
+            except Exception:
+                pass
 
     except Exception as e:
         import traceback
