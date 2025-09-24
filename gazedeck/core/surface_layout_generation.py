@@ -3,6 +3,7 @@
 # python
 import cv2
 import os
+import numpy as np
 
 # internal
 from gazedeck.core.surface_layout_discovery import SurfaceLayout, TagInfo
@@ -72,7 +73,7 @@ def generate_surface_layout_from_rows_and_columns(id: str, rows: int, columns: i
                 # AprilTag convention: corners ordered counter-clockwise starting from bottom-left
                 # This matches what the marker detection expects as input
                 # 0: bottom-left, 1: bottom-right, 2: top-right, 3: top-left
-                corners = (BOTTOM_LEFT_COORD, BOTTOM_RIGHT_COORD, TOP_RIGHT_COORD, TOP_LEFT_COORD)
+                corners = np.array([BOTTOM_LEFT_COORD, BOTTOM_RIGHT_COORD, TOP_RIGHT_COORD, TOP_LEFT_COORD], dtype=np.float32)
                 tags[tag_id] = TagInfo(size=tag_size_meters, corners=corners)
                 tag_id += 1
 

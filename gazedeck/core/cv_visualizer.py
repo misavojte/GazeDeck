@@ -57,7 +57,7 @@ def draw_tag_visualization(frame: npt.NDArray[np.uint8],
     for marker in detected_markers:
         try:
             # Use original distorted corners directly for accurate visualization
-            corners_distorted = np.array(marker.original_corners, dtype=np.float32)
+            corners_distorted = marker.original_corners  # Already np.ndarray
             corners_int = corners_distorted.astype(int)
             
         except Exception as e:

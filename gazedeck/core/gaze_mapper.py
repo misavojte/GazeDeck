@@ -50,12 +50,12 @@ class GazeMapper:
             The emission_id used
 
         Note:
-            Corners are internally converted to numpy arrays for performance
+            Corners are expected to be numpy arrays (np.float32)
         """
         # Convert TagInfo to the format expected by surface tracking
         converted_markers = {}
         for tag_id, tag_info in tags.items():
-            converted_markers[tag_id] = np.array(tag_info.corners, dtype=np.float32)
+            converted_markers[tag_id] = tag_info.corners  # Already np.ndarray
 
         self._surfaces[emission_id] = {
             'markers': converted_markers,

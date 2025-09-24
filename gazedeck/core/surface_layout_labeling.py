@@ -4,6 +4,8 @@
 from __future__ import annotations
 from typing import NamedTuple, Tuple
 from typing import Awaitable, Callable, Dict, Optional
+import numpy as np
+import numpy.typing as npt
 
 # internal
 from gazedeck.core.surface_layout_discovery import SurfaceLayout, TagInfo
@@ -18,7 +20,7 @@ class SurfaceLayoutLabeled(NamedTuple):
         - Adds emission_id (int): Integer ID used for WebSocket transmission (avoids runtime int conversion)
     """
     id: str
-    tags: Dict[int, TagInfo]  # Each tag has size and four corner coordinates
+    tags: Dict[int, TagInfo]  # Each tag has size and 4x2 corner array
     size: Tuple[float, float] # width, height
     label: str
     emission_id: int  # ID used for WebSocket transmission

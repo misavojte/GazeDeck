@@ -3,6 +3,8 @@
 # python
 from dataclasses import dataclass
 from typing import Dict, Tuple, NamedTuple
+import numpy as np
+import numpy.typing as npt
 
 # external
 import yaml
@@ -10,7 +12,7 @@ import os
 
 class TagInfo(NamedTuple):
     size: float  # Physical size in meters
-    corners: Tuple[Tuple[float, float], Tuple[float, float], Tuple[float, float], Tuple[float, float]]  # Four corner coordinates
+    corners: npt.NDArray[np.float32]  # 4x2 array of corner coordinates
 
 class SurfaceLayout(NamedTuple):
     id: str
@@ -21,7 +23,7 @@ class SurfaceLayout(NamedTuple):
         """Convert the SurfaceLayout to a dictionary for serialization."""
         return {
             "id": self.id,
-            "tags": {tag_id: {"size": tag_info.size, "corners": [list(corner) for corner in tag_info.corners]} for tag_id, tag_info in self.tags.items()},
+            "tags": {tag_id: {"size": tag_info.size, "corners": tag_info.corners.tolist()} for tag_id, tag_info in self.tags.items()},
             "size": list(self.size)
         }
 
@@ -37,7 +39,7 @@ def load_surface_layout(file_path: str) -> SurfaceLayout:
     for tag_id, tag_data in data["tags"].items():
         tags[int(tag_id)] = TagInfo(
             size=tag_data["size"],
-            corners=tuple(tuple(corner) for corner in tag_data["corners"])
+            corners=np.asarray(tag_data["corners"], dtype=np.float32)  # Use asarray to avoid unnecessary copy
         )
     
     return SurfaceLayout(data["id"], tags, data["size"])

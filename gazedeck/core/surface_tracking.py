@@ -35,7 +35,7 @@ def calculate_surface_homography(detected_markers: List[DetectedMarker], surface
     for marker in detected_markers:
         if marker.tag_id in surface_data['markers']:
             # Get corresponding points for this marker (already numpy arrays)
-            marker_corners = np.array(marker.corners, dtype=np.float32)
+            marker_corners = marker.corners  # Already np.ndarray
             surface_corners = surface_data['markers'][marker.tag_id]  # Already np.ndarray
 
             if len(marker_corners) == len(surface_corners):

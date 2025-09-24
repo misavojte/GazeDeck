@@ -16,14 +16,14 @@ class DetectedMarker(NamedTuple):
     Pose will be computed in the next dev step.
     Args:
         tag_id: Unique marker ID
-        corners: List of (x, y) corner coordinates (undistorted)
+        corners: 4x2 array of (x, y) corner coordinates (undistorted)
         confidence: Detection confidence score (decision_margin from AprilTag)
-        original_corners: List of (x, y) corner coordinates (original distorted) for visualization
+        original_corners: 4x2 array of (x, y) corner coordinates (original distorted) for visualization
     """
     tag_id: int
-    corners: Tuple[Tuple[float, float], ...]
+    corners: npt.NDArray[np.float32]
     confidence: float
-    original_corners: Tuple[Tuple[float, float], ...]
+    original_corners: npt.NDArray[np.float32]
 
 TAG_FAMILY = "tag36h11"
 
@@ -104,9 +104,9 @@ class SimpleMarkerDetector:
 
             result.append(DetectedMarker(
                 tag_id=marker.tag_id,
-                corners=tuple(tuple(corner) for corner in undistorted_corners),
+                corners=undistorted_corners,  # Already np.ndarray, no conversion needed
                 confidence=marker.decision_margin,
-                original_corners=tuple(tuple(corner) for corner in marker.corners)
+                original_corners=np.asarray(marker.corners, dtype=np.float32)  # Use asarray to avoid copy if already array
             ))
 
         return result
