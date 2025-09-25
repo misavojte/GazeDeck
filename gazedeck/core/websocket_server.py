@@ -55,16 +55,20 @@ async def _broadcaster() -> None:
     Fans out messages from the global queue to each client queue in parallel.
     Drops per-client if its queue is full (keeps fast clients fast).
     """
-    while True:
-        msg = await _broadcast_q.get()
-        # Parallel fan-out: send to all clients simultaneously
-        async with _client_lock:
-            client_queues = _clients.copy()
-        if client_queues:  # Only create tasks if we have clients
-            tasks = []
-            for q in client_queues:
-                tasks.append(_send_to_client(q, msg))
-            await asyncio.gather(*tasks, return_exceptions=True)
+    try:
+        while True:
+            msg = await _broadcast_q.get()
+            # Parallel fan-out: send to all clients simultaneously
+            async with _client_lock:
+                client_queues = _clients.copy()
+            if client_queues:  # Only create tasks if we have clients
+                tasks = []
+                for q in client_queues:
+                    tasks.append(_send_to_client(q, msg))
+                await asyncio.gather(*tasks, return_exceptions=True)
+    except asyncio.CancelledError:
+        # This is expected during shutdown
+        pass
 
 async def _send_to_client(q: asyncio.Queue, msg: bytes) -> None:
     """Send message to a single client queue."""
@@ -139,9 +143,9 @@ def broadcast_gaze_data(device_id: int, surface_id: int, x: float, y: float, tim
     broadcast_nowait(message)
 
 async def stop_ws_server(server: websockets.server.Serve, btask: asyncio.Task) -> None:
-    """Graceful shutdown."""
+    """Graceful shutdown with proper cancellation handling."""
     server.close()
     await server.wait_closed()
     btask.cancel()
-    with contextlib.suppress(Exception):
+    with contextlib.suppress(asyncio.CancelledError):
         await btask

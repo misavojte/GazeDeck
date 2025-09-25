@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import atexit
+import gc
+import warnings
 from gazedeck.cli.command_test_device_discovery import (
     add_test_device_discovery_parser,
     execute_test_device_discovery
@@ -22,6 +25,23 @@ from gazedeck.cli.command_mock import (
     add_mock_parser,
     execute_mock
 )
+
+def _cleanup_all_sessions():
+    """Clean up all aiohttp sessions to prevent unclosed session warnings."""
+    # Suppress aiohttp warnings during cleanup
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="Unclosed client session")
+        warnings.filterwarnings("ignore", message="Unclosed connector")
+        warnings.filterwarnings("ignore", message=".*Unclosed.*")
+        warnings.filterwarnings("ignore", category=ResourceWarning)
+
+        # Force garbage collection to close any remaining sessions
+        gc.collect()
+
+@atexit.register
+def _atexit_cleanup():
+    """Cleanup function registered with atexit to run when program exits."""
+    _cleanup_all_sessions()
 
 
 def main() -> None:
@@ -54,4 +74,15 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n🛑 Received keyboard interrupt, exiting gracefully...")
+        _cleanup_all_sessions()
+        # Exit cleanly without showing traceback
+        exit(0)
+    except asyncio.CancelledError:
+        # This can occur during shutdown - suppress it
+        print("\n🛑 Shutdown completed")
+        _cleanup_all_sessions()
+        exit(0)

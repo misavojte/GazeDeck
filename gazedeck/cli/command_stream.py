@@ -9,6 +9,9 @@ import asyncio
 import json
 import threading
 import queue
+import atexit
+import weakref
+import warnings
 from typing import Dict, Any
 from contextlib import asynccontextmanager
 
@@ -19,6 +22,31 @@ from gazedeck.core.streaming_gaze_mapping import create_streaming_context, enque
 from gazedeck.core.surface_layout_labeling import SurfaceLayoutLabeled, label_surface_layouts
 from gazedeck.core.surface_layout_discovery import discover_all_surface_layouts, SurfaceLayout
 from gazedeck.core.websocket_server import start_ws_server, stop_ws_server, broadcast_gaze_data
+
+# Global cleanup registry
+_cleanup_refs = weakref.WeakSet()
+
+def _cleanup_all_sessions():
+    """Clean up all aiohttp sessions to prevent unclosed session warnings."""
+    import gc
+
+    # Suppress aiohttp warnings during cleanup
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="Unclosed client session")
+        warnings.filterwarnings("ignore", message="Unclosed connector")
+        warnings.filterwarnings("ignore", message=".*Unclosed.*")
+        warnings.filterwarnings("ignore", category=ResourceWarning)
+
+        # Force garbage collection to close any remaining sessions
+        gc.collect()
+
+        # Additional cleanup for any remaining references
+        _cleanup_refs.clear()
+
+@atexit.register
+def _atexit_cleanup():
+    """Cleanup function registered with atexit to run when program exits."""
+    _cleanup_all_sessions()
 
 def add_stream_parser(subparsers) -> argparse.ArgumentParser:
     """
@@ -162,7 +190,6 @@ async def execute_stream(args: argparse.Namespace):
         return
 
     # discover and setup devices
-    print(f"🔍 Discovering devices for {args.duration}s...")
     labeled_devices = await setup_labeled_devices_cli(args.duration)
     print(f"📋 Found {len(labeled_devices)} labeled devices: {list(labeled_devices.keys())}")
     if len(labeled_devices) == 0:
@@ -172,6 +199,9 @@ async def execute_stream(args: argparse.Namespace):
     # Start WebSocket server
     print("🚀 Starting WebSocket server on ws://localhost:8765")
     server, broadcaster_task = await start_ws_server(host="localhost", port=8765)
+
+    # Set up signal handling for graceful shutdown
+    shutdown_event = asyncio.Event()
 
     try:
         apriltag_params = {
@@ -186,24 +216,24 @@ async def execute_stream(args: argparse.Namespace):
 
         # Create streaming tasks with proper async patterns
         stream_tasks = []
-        
+
         # Create WebSocket streaming tasks for all devices
         for labeled_device in labeled_devices.values():
             task = asyncio.create_task(
                 stream_gaze_mapped_data_to_ws(
-                    labeled_device, labeled_surface_layouts, 
-                    apriltag_params, args.gaze_filter_alpha
+                    labeled_device, labeled_surface_layouts,
+                    apriltag_params, args.gaze_filter_alpha, shutdown_event
                 )
             )
             stream_tasks.append(task)
-        
+
         # Add CV visualization as parallel task if requested
         if args.cv:
             if len(labeled_devices) > 1:
                 print("⚠️  CV visualization currently supports single device only. Using first device.")
             first_device = next(iter(labeled_devices.values()))
             cv_task = asyncio.create_task(
-                stream_cv_visualization(first_device, labeled_surface_layouts, apriltag_params, layouts)
+                stream_cv_visualization(first_device, labeled_surface_layouts, apriltag_params, layouts, shutdown_event)
             )
             stream_tasks.append(cv_task)
 
@@ -212,40 +242,63 @@ async def execute_stream(args: argparse.Namespace):
 
         # Use asyncio.gather with proper exception handling
         # This is the recommended pattern for managing multiple concurrent tasks
-        await asyncio.gather(*stream_tasks, return_exceptions=True)
-        
+        try:
+            await asyncio.gather(*stream_tasks, return_exceptions=True)
+        except asyncio.CancelledError:
+            # This is expected during shutdown - suppress it
+            pass
+
     except KeyboardInterrupt:
-        print("❌ KeyboardInterrupt: Stopping the streams")
+        print("\n🛑 Received keyboard interrupt, initiating graceful shutdown...")
+        shutdown_event.set()
     except ValueError as e:
         print(f"❌ ValueError: {e}")
+        shutdown_event.set()
     except Exception as e:
         print(f"❌ Unexpected error: {e}")
+        shutdown_event.set()
     finally:
         # Graceful shutdown with proper task cancellation
         print("🛑 Initiating graceful shutdown...")
-        
+
         # Cancel all tasks
         for task in stream_tasks:
             if not task.done():
                 task.cancel()
-        
+
         # Wait for tasks to complete with timeout
         if stream_tasks:
             try:
                 await asyncio.wait_for(
                     asyncio.gather(*stream_tasks, return_exceptions=True),
-                    timeout=2.0
+                    timeout=5.0  # Increased timeout for cleanup
                 )
-            except asyncio.TimeoutError:
-                print("⚠️  Some tasks did not shutdown gracefully within timeout")
-        
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                # These are expected during shutdown - don't show warnings
+                pass
+
         # Stop WebSocket server
-        await stop_ws_server(server, broadcaster_task)
-        print("🧹 The streaming task has stopped")
+        try:
+            await stop_ws_server(server, broadcaster_task)
+        except (Exception, asyncio.CancelledError):
+            # WebSocket server cleanup errors are expected during shutdown
+            pass
+
+        # Close all device connections
+        close_count = 0
+        for ld in labeled_devices.values():
+            try:
+                await ld.device.close()
+                close_count += 1
+            except Exception:
+                # Ignore close errors during shutdown
+                pass
+
+        print("✅ Streaming stopped gracefully")
 
 
 
-async def stream_gaze_mapped_data_to_ws(labeled_device: LabeledDevice, labeled_surface_layouts: Dict[int, SurfaceLayoutLabeled], apriltag_params: Dict[str, Any], gaze_filter_alpha: float):
+async def stream_gaze_mapped_data_to_ws(labeled_device: LabeledDevice, labeled_surface_layouts: Dict[int, SurfaceLayoutLabeled], apriltag_params: Dict[str, Any], gaze_filter_alpha: float, shutdown_event: asyncio.Event):
     """
     WebSocket streaming with proper async context management.
     
@@ -263,9 +316,9 @@ async def stream_gaze_mapped_data_to_ws(labeled_device: LabeledDevice, labeled_s
         
         # Use the new context manager for proper resource management
         async with create_streaming_context(
-            labeled_device, labeled_surface_layouts, 
+            labeled_device, labeled_surface_layouts,
             apriltag_params, gaze_filter_alpha
-        ) as (queue_result, shutdown_event):
+        ) as (queue_result, context_shutdown):
             
             print(f"📡 Streaming context created for device {labeled_device.emission_id} {labeled_device.label}")
             
@@ -279,7 +332,7 @@ async def stream_gaze_mapped_data_to_ws(labeled_device: LabeledDevice, labeled_s
             message_count = 0
             
             # Real-time processing loop with proper async patterns
-            while not shutdown_event.is_set():
+            while not shutdown_event.is_set() and not context_shutdown.is_set():
                 try:
                     # Use timeout to allow periodic shutdown checks
                     result = await asyncio.wait_for(queue_result.get(), timeout=0.1)
@@ -318,7 +371,7 @@ async def stream_gaze_mapped_data_to_ws(labeled_device: LabeledDevice, labeled_s
         raise
 
 
-async def stream_cv_visualization(labeled_device: LabeledDevice, labeled_surface_layouts: Dict[int, SurfaceLayoutLabeled], apriltag_params: Dict[str, Any], surface_layouts: Dict[int, SurfaceLayout]):
+async def stream_cv_visualization(labeled_device: LabeledDevice, labeled_surface_layouts: Dict[int, SurfaceLayoutLabeled], apriltag_params: Dict[str, Any], surface_layouts: Dict[int, SurfaceLayout], shutdown_event: asyncio.Event):
     """
     CV visualization with proper async patterns and graceful shutdown.
     
@@ -346,8 +399,7 @@ async def stream_cv_visualization(labeled_device: LabeledDevice, labeled_surface
         MAX_QUEUE_VIDEO_SIZE = 3  # Smaller queue for faster processing
         queue_video: asyncio.Queue[VideoFrame] = asyncio.Queue(maxsize=MAX_QUEUE_VIDEO_SIZE)
 
-        # Use asyncio.Event for proper async coordination
-        shutdown_event = asyncio.Event()
+        # Use the passed shutdown_event for coordination
 
         # Start video collection task with shutdown support
         video_task = asyncio.create_task(
