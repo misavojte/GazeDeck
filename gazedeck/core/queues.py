@@ -16,18 +16,8 @@ async def enqueue_sensor_data(sensor: AsyncIterator[T], queue: asyncio.Queue[T],
         try:
             queue.put_nowait((datum.timestamp_unix_seconds, datum))
         except QueueFull:
-            # Queue full - drop the oldest to keep the freshest data and avoid latency build-up
-            try:
-                _ = queue.get_nowait()
-            except QueueEmpty:
-                # Rare race: became empty, just skip
-                continue
-            # Try to insert the newest frame after dropping the oldest
-            try:
-                queue.put_nowait((datum.timestamp_unix_seconds, datum))
-            except QueueFull:
-                # If still full due to concurrency, give up on this datum
-                pass
+            # Queue full - drop this datum silently for performance
+            pass
 
 async def get_most_recent_item(queue: asyncio.Queue[T]) -> Tuple[float, T]:
     item = await queue.get()
