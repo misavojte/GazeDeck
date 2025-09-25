@@ -411,9 +411,7 @@ async def stream_cv_visualization(labeled_device: LabeledDevice, labeled_surface
             while not shutdown_event.is_set():
                 try:
                     # Get latest video frame (non-blocking with timeout)
-                    video_ts, video_frame = await asyncio.wait_for(
-                        get_most_recent_item(queue_video), timeout=0.1  # Shorter timeout for responsiveness
-                    )
+                    video_ts, video_frame = await get_most_recent_item(queue_video, timeout=0.1)
 
                     frame_count += 1
 

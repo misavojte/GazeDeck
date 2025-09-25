@@ -20,7 +20,7 @@ from gazedeck.core.device_labeling import LabeledDevice
 from gazedeck.core.device_senzors import get_sensor_urls
 from gazedeck.core.gaze_mapper import GazeMapper
 from gazedeck.core.surface_layout_labeling import SurfaceLayoutLabeled
-from gazedeck.core.queues import enqueue_sensor_data, get_most_recent_item, get_closest_item
+from gazedeck.core.queues import get_most_recent_item, get_closest_item
 from gazedeck.core.gaze_filter import ExponentialFilter
 from pupil_labs.realtime_api.streaming import IMUData
 
@@ -177,14 +177,10 @@ async def match_and_map_gaze(queue_video: asyncio.Queue[VideoFrame], queue_gaze:
         # Real-time processing loop with proper async patterns
         while not shutdown_event.is_set():
             try:
-                # Use asyncio.wait_for for timeout-based processing
-                # This prevents indefinite blocking and allows graceful shutdown
-                video_ts, video_item = await asyncio.wait_for(
-                    get_most_recent_item(queue_video), timeout=0.1
-                )
-                gaze_ts, gaze_item = await asyncio.wait_for(
-                    get_closest_item(queue_gaze, video_ts), timeout=0.1
-                )
+                # Use timeout-based processing to prevent indefinite blocking
+                # This allows graceful shutdown checks
+                video_ts, video_item = await get_most_recent_item(queue_video, timeout=0.1)
+                gaze_ts, gaze_item = await get_closest_item(queue_gaze, video_ts, timeout=0.1)
                 
                 # Process CPU-intensive operations in thread pool
                 # This is the correct asyncio pattern for blocking operations
