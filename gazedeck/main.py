@@ -4,7 +4,6 @@ import argparse
 import asyncio
 import atexit
 import gc
-import warnings
 from gazedeck.cli.command_test_device_discovery import (
     add_test_device_discovery_parser,
     execute_test_device_discovery
@@ -28,15 +27,8 @@ from gazedeck.cli.command_mock import (
 
 def _cleanup_all_sessions():
     """Clean up all aiohttp sessions to prevent unclosed session warnings."""
-    # Suppress aiohttp warnings during cleanup
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", message="Unclosed client session")
-        warnings.filterwarnings("ignore", message="Unclosed connector")
-        warnings.filterwarnings("ignore", message=".*Unclosed.*")
-        warnings.filterwarnings("ignore", category=ResourceWarning)
-
-        # Force garbage collection to close any remaining sessions
-        gc.collect()
+    # Force garbage collection to close any remaining sessions
+    gc.collect()
 
 @atexit.register
 def _atexit_cleanup():
@@ -60,15 +52,33 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.command == "test-device-discovery":
-        asyncio.run(execute_test_device_discovery(args))
+        try:
+            asyncio.run(execute_test_device_discovery(args))
+        except (KeyboardInterrupt, asyncio.CancelledError):
+            print("\n🛑 Received keyboard interrupt, exiting gracefully...")
+            return
     elif args.command == "stream":
-        asyncio.run(execute_stream(args))
+        try:
+            asyncio.run(execute_stream(args))
+        except (KeyboardInterrupt, asyncio.CancelledError):
+            print("\n🛑 Received keyboard interrupt, exiting gracefully...")
+            # Force immediate cleanup of any remaining sessions
+            _cleanup_all_sessions()
+            return
     elif args.command == "mock":
-        asyncio.run(execute_mock(args))
+        try:
+            asyncio.run(execute_mock(args))
+        except (KeyboardInterrupt, asyncio.CancelledError):
+            print("\n🛑 Received keyboard interrupt, exiting gracefully...")
+            return
     elif args.command == "generate-surface":
         execute_generate_surface(args)
     elif args.command == "test-surface-layout-discovery":
-        asyncio.run(execute_test_surface_layout_discovery(args))
+        try:
+            asyncio.run(execute_test_surface_layout_discovery(args))
+        except (KeyboardInterrupt, asyncio.CancelledError):
+            print("\n🛑 Received keyboard interrupt, exiting gracefully...")
+            return
     else:
         parser.print_help()
 

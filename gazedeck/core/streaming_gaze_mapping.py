@@ -96,6 +96,12 @@ async def create_streaming_context(labeled_device: LabeledDevice, surface_layout
         # Graceful shutdown: signal all tasks to stop
         shutdown_event.set()
         
+        # IMMEDIATELY close device to stop RTSP streams
+        try:
+            await labeled_device.device.close()
+        except Exception:
+            pass
+        
         # Cancel all tasks with proper cleanup
         for task in tasks:
             if not task.done():
@@ -140,6 +146,10 @@ async def enqueue_sensor_data(sensor_stream, queue: asyncio.Queue, shutdown_even
     except asyncio.CancelledError:
         print(f"📡 {stream_name} cancelled gracefully")
         raise
+    except KeyboardInterrupt:
+        # Swallow KeyboardInterrupt inside worker to allow single-pass Ctrl+C
+        print(f"🛑 {stream_name} interrupted")
+        return
     except Exception as e:
         print(f"❌ Error in {stream_name}: {e}")
         raise
@@ -236,6 +246,10 @@ async def match_and_map_gaze(queue_video: asyncio.Queue[VideoFrame], queue_gaze:
                 continue
             except asyncio.CancelledError:
                 print("🛑 Gaze mapping cancelled gracefully")
+                break
+            except KeyboardInterrupt:
+                # Swallow KeyboardInterrupt inside worker to allow single-pass Ctrl+C
+                print("🛑 Gaze mapping interrupted")
                 break
             except Exception as e:
                 print(f"⚠️  Error in gaze mapping: {e}")

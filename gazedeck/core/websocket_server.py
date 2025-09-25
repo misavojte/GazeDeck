@@ -143,9 +143,13 @@ def broadcast_gaze_data(device_id: int, surface_id: int, x: float, y: float, tim
     broadcast_nowait(message)
 
 async def stop_ws_server(server: websockets.server.Serve, btask: asyncio.Task) -> None:
-    """Graceful shutdown with proper cancellation handling."""
+    """Graceful shutdown with short timeouts; never blocks indefinitely."""
     server.close()
-    await server.wait_closed()
+    # Ensure server closes quickly
+    with contextlib.suppress(asyncio.TimeoutError):
+        await asyncio.wait_for(server.wait_closed(), timeout=0.3)
+
+    # Stop broadcaster task
     btask.cancel()
-    with contextlib.suppress(asyncio.CancelledError):
-        await btask
+    with contextlib.suppress(asyncio.CancelledError, asyncio.TimeoutError):
+        await asyncio.wait_for(btask, timeout=0.3)

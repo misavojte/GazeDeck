@@ -11,7 +11,7 @@ import threading
 import queue
 import atexit
 import weakref
-import warnings
+import signal
 from typing import Dict, Any
 from contextlib import asynccontextmanager
 
@@ -30,18 +30,11 @@ def _cleanup_all_sessions():
     """Clean up all aiohttp sessions to prevent unclosed session warnings."""
     import gc
 
-    # Suppress aiohttp warnings during cleanup
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", message="Unclosed client session")
-        warnings.filterwarnings("ignore", message="Unclosed connector")
-        warnings.filterwarnings("ignore", message=".*Unclosed.*")
-        warnings.filterwarnings("ignore", category=ResourceWarning)
+    # Force garbage collection to close any remaining sessions
+    gc.collect()
 
-        # Force garbage collection to close any remaining sessions
-        gc.collect()
-
-        # Additional cleanup for any remaining references
-        _cleanup_refs.clear()
+    # Additional cleanup for any remaining references
+    _cleanup_refs.clear()
 
 @atexit.register
 def _atexit_cleanup():
@@ -251,6 +244,8 @@ async def execute_stream(args: argparse.Namespace):
     except KeyboardInterrupt:
         print("\n🛑 Received keyboard interrupt, initiating graceful shutdown...")
         shutdown_event.set()
+        
+        # Device close is now handled in streaming context cleanup
     except ValueError as e:
         print(f"❌ ValueError: {e}")
         shutdown_event.set()
@@ -261,38 +256,28 @@ async def execute_stream(args: argparse.Namespace):
         # Graceful shutdown with proper task cancellation
         print("🛑 Initiating graceful shutdown...")
 
-        # Cancel all tasks
+        # Cancel all tasks (fire-and-forget)
         for task in stream_tasks:
             if not task.done():
                 task.cancel()
 
-        # Wait for tasks to complete with timeout
+        # Short, non-blocking wait for tasks to acknowledge cancellation
         if stream_tasks:
             try:
                 await asyncio.wait_for(
                     asyncio.gather(*stream_tasks, return_exceptions=True),
-                    timeout=5.0  # Increased timeout for cleanup
+                    timeout=0.3
                 )
             except (asyncio.TimeoutError, asyncio.CancelledError):
-                # These are expected during shutdown - don't show warnings
                 pass
 
         # Stop WebSocket server
         try:
             await stop_ws_server(server, broadcaster_task)
         except (Exception, asyncio.CancelledError):
-            # WebSocket server cleanup errors are expected during shutdown
             pass
 
-        # Close all device connections
-        close_count = 0
-        for ld in labeled_devices.values():
-            try:
-                await ld.device.close()
-                close_count += 1
-            except Exception:
-                # Ignore close errors during shutdown
-                pass
+        # Devices already closed in KeyboardInterrupt handler
 
         print("✅ Streaming stopped gracefully")
 
