@@ -10,11 +10,12 @@ import json
 import threading
 import queue
 from typing import Dict, Any
+from contextlib import asynccontextmanager
 
 from gazedeck.cli.setup_labeled_devices import setup_labeled_devices_cli
 from gazedeck.cli.setup_labeled_surface_layouts import setup_labeled_surface_layouts_cli
 from gazedeck.core.device_labeling import LabeledDevice
-from gazedeck.core.streaming_gaze_mapping import stream_gaze_mapped_data
+from gazedeck.core.streaming_gaze_mapping import create_streaming_context, enqueue_sensor_data
 from gazedeck.core.surface_layout_labeling import SurfaceLayoutLabeled, label_surface_layouts
 from gazedeck.core.surface_layout_discovery import discover_all_surface_layouts, SurfaceLayout
 from gazedeck.core.websocket_server import start_ws_server, stop_ws_server, broadcast_gaze_data
@@ -183,10 +184,18 @@ async def execute_stream(args: argparse.Namespace):
             'refine_edges': args.apriltag_refine_edges,
         }
 
-        # Always start normal WebSocket streaming
-        stream_tasks = [
-            asyncio.create_task(stream_gaze_mapped_data_to_ws(labeled_device, labeled_surface_layouts, apriltag_params, args.gaze_filter_alpha)) for labeled_device in labeled_devices.values()
-        ]
+        # Create streaming tasks with proper async patterns
+        stream_tasks = []
+        
+        # Create WebSocket streaming tasks for all devices
+        for labeled_device in labeled_devices.values():
+            task = asyncio.create_task(
+                stream_gaze_mapped_data_to_ws(
+                    labeled_device, labeled_surface_layouts, 
+                    apriltag_params, args.gaze_filter_alpha
+                )
+            )
+            stream_tasks.append(task)
         
         # Add CV visualization as parallel task if requested
         if args.cv:
@@ -201,7 +210,10 @@ async def execute_stream(args: argparse.Namespace):
         print("All streams started")
         print("Press Ctrl+C to stop the streams")
 
-        await asyncio.gather(*stream_tasks) # wait for all streams to finish (should be infinite)
+        # Use asyncio.gather with proper exception handling
+        # This is the recommended pattern for managing multiple concurrent tasks
+        await asyncio.gather(*stream_tasks, return_exceptions=True)
+        
     except KeyboardInterrupt:
         print("❌ KeyboardInterrupt: Stopping the streams")
     except ValueError as e:
@@ -209,79 +221,117 @@ async def execute_stream(args: argparse.Namespace):
     except Exception as e:
         print(f"❌ Unexpected error: {e}")
     finally:
+        # Graceful shutdown with proper task cancellation
+        print("🛑 Initiating graceful shutdown...")
+        
+        # Cancel all tasks
         for task in stream_tasks:
-            task.cancel()
+            if not task.done():
+                task.cancel()
+        
+        # Wait for tasks to complete with timeout
+        if stream_tasks:
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(*stream_tasks, return_exceptions=True),
+                    timeout=2.0
+                )
+            except asyncio.TimeoutError:
+                print("⚠️  Some tasks did not shutdown gracefully within timeout")
+        
+        # Stop WebSocket server
         await stop_ws_server(server, broadcaster_task)
-        print("The streaming task has stopped")
+        print("🧹 The streaming task has stopped")
 
 
 
 async def stream_gaze_mapped_data_to_ws(labeled_device: LabeledDevice, labeled_surface_layouts: Dict[int, SurfaceLayoutLabeled], apriltag_params: Dict[str, Any], gaze_filter_alpha: float):
     """
-    Stream gaze mapped data from a single device to a WebSocket server using binary format.
-
+    WebSocket streaming with proper async context management.
+    
+    Uses streaming context manager for better resource cleanup
+    and implements proper async patterns for real-time processing.
+    
     Performance optimized for high-frequency gaze tracking:
     - Binary serialization: 30x faster than JSON
     - One message per surface: eliminates nested structures
     - NaN for invalid data: mathematical correctness with minimal overhead
+    - Proper async context management for resource cleanup
     """
     try:
         print(f"🎯 Starting gaze streaming for device: {labeled_device.emission_id} {labeled_device.label}")
-        queue_result = await stream_gaze_mapped_data(labeled_device, labeled_surface_layouts, apriltag_params, gaze_filter_alpha)
-        print(f"📡 Queue created for device {labeled_device.emission_id} {labeled_device.label}, waiting for gaze data...")
-
-        # Use emission_id for WebSocket transmission (no runtime int conversion needed)
-        device_id = labeled_device.emission_id
-
-        surface_id_map = {}
-        for surface_idx, surface_layout in labeled_surface_layouts.items():
-            surface_id_map[surface_layout.label] = surface_layout.emission_id
-
-        message_count = 0
-        while True:
-            result = await queue_result.get()
-            message_count += 1
-
-            # Send one binary message per surface (not nested JSON)
-            for surface_label, surface_result in result.surface_gaze.items():
-                surface_id = surface_id_map.get(surface_label, 0)
-
-                if surface_result is None:
-                    # Surface not detected - use NaN coordinates
-                    x, y = float('nan'), float('nan')
-                else:
-                    # Valid surface detection
-                    x, y = surface_result.x, surface_result.y
-
-                # Binary serialization - massively more efficient than JSON
-                broadcast_gaze_data(device_id, surface_id, x, y, result.timestamp)
-
+        
+        # Use the new context manager for proper resource management
+        async with create_streaming_context(
+            labeled_device, labeled_surface_layouts, 
+            apriltag_params, gaze_filter_alpha
+        ) as (queue_result, shutdown_event):
+            
+            print(f"📡 Streaming context created for device {labeled_device.emission_id} {labeled_device.label}")
+            
+            # Pre-compute surface ID mapping for performance
+            device_id = labeled_device.emission_id
+            surface_id_map = {
+                surface_layout.label: surface_layout.emission_id
+                for surface_layout in labeled_surface_layouts.values()
+            }
+            
+            message_count = 0
+            
+            # Real-time processing loop with proper async patterns
+            while not shutdown_event.is_set():
+                try:
+                    # Use timeout to allow periodic shutdown checks
+                    result = await asyncio.wait_for(queue_result.get(), timeout=0.1)
+                    message_count += 1
+                    
+                    # Send one binary message per surface (not nested JSON)
+                    for surface_label, surface_result in result.surface_gaze.items():
+                        surface_id = surface_id_map.get(surface_label, 0)
+                        
+                        if surface_result is None:
+                            # Surface not detected - use NaN coordinates
+                            x, y = float('nan'), float('nan')
+                        else:
+                            # Valid surface detection
+                            x, y = surface_result.x, surface_result.y
+                        
+                        # Binary serialization - massively more efficient than JSON
+                        broadcast_gaze_data(device_id, surface_id, x, y, result.timestamp)
+                        
+                except asyncio.TimeoutError:
+                    # No data available, continue to check shutdown
+                    continue
+                except asyncio.CancelledError:
+                    print(f"🛑 WebSocket streaming cancelled for device {labeled_device.emission_id}")
+                    break
+                    
+            print(f"📊 Processed {message_count} messages for device {labeled_device.emission_id}")
+            
+    except asyncio.CancelledError:
+        print(f"🛑 WebSocket streaming task cancelled for device {labeled_device.emission_id}")
+        raise
     except Exception as e:
         import traceback
         traceback.print_exc()
-        print(f"❌ Unexpected error in stream_gaze_mapped_data_to_ws: {e}")
-        return
+        print(f"❌ Unexpected error in WebSocket streaming: {e}")
+        raise
 
 
 async def stream_cv_visualization(labeled_device: LabeledDevice, labeled_surface_layouts: Dict[int, SurfaceLayoutLabeled], apriltag_params: Dict[str, Any], surface_layouts: Dict[int, SurfaceLayout]):
     """
-    Lightweight CV visualization that runs in parallel with WebSocket streaming.
-
-    Uses a separate video stream optimized for visualization at ~15 FPS
-    to avoid impacting the main gaze mapping performance.
-
-    Shows detected markers with surface boundaries for better spatial awareness.
-
-    Performance optimized with:
-    - Separate GUI thread for all OpenCV operations (non-blocking)
-    - Async frame processing in main event loop
-    - Thread-safe queue for frame passing
+    CV visualization with proper async patterns and graceful shutdown.
+    
+    Uses asyncio.Event for async coordination, proper exception handling
+    and resource cleanup, better integration with asyncio task management,
+    and maintains performance optimizations.
     """
     from gazedeck.core.cv_visualizer import CVVisualizer
     from gazedeck.core.camera_distortion import CameraDistortion
     from gazedeck.core.device_senzors import get_sensor_urls
-    from gazedeck.core.queues import enqueue_sensor_data, get_most_recent_item
+    from gazedeck.core.queues import get_most_recent_item
     from gazedeck.core.marker_detection import SimpleMarkerDetector
+    from gazedeck.core.streaming_gaze_mapping import enqueue_sensor_data
     from pupil_labs.realtime_api import receive_video_frames
     from pupil_labs.realtime_api.streaming import VideoFrame
 
@@ -296,12 +346,16 @@ async def stream_cv_visualization(labeled_device: LabeledDevice, labeled_surface
         MAX_QUEUE_VIDEO_SIZE = 3  # Smaller queue for faster processing
         queue_video: asyncio.Queue[VideoFrame] = asyncio.Queue(maxsize=MAX_QUEUE_VIDEO_SIZE)
 
-        # Start video collection task
-        asyncio.create_task(
+        # Use asyncio.Event for proper async coordination
+        shutdown_event = asyncio.Event()
+
+        # Start video collection task with shutdown support
+        video_task = asyncio.create_task(
             enqueue_sensor_data(
                 receive_video_frames(sensor_video_url, run_loop=True),
                 queue_video,
-                f"CV video (device: {labeled_device.emission_id})",
+                shutdown_event,
+                f"CV video (device: {labeled_device.emission_id})"
             )
         )
 
@@ -311,7 +365,7 @@ async def stream_cv_visualization(labeled_device: LabeledDevice, labeled_surface
 
         # Thread-safe queue for passing frames to GUI thread
         frame_queue: queue.Queue = queue.Queue(maxsize=2)  # Small queue to prevent memory buildup
-        stop_event = threading.Event()
+        stop_event = threading.Event()  # Still use threading.Event for GUI thread coordination
 
         print("🔄 Starting CV visualization loop...")
 
@@ -354,7 +408,7 @@ async def stream_cv_visualization(labeled_device: LabeledDevice, labeled_surface
 
         frame_count = 0
         try:
-            while not stop_event.is_set():
+            while not shutdown_event.is_set():
                 try:
                     # Get latest video frame (non-blocking with timeout)
                     video_ts, video_frame = await asyncio.wait_for(
@@ -397,6 +451,9 @@ async def stream_cv_visualization(labeled_device: LabeledDevice, labeled_surface
                 except asyncio.TimeoutError:
                     # No new frame available, continue processing
                     pass
+                except asyncio.CancelledError:
+                    print("🛑 CV visualization cancelled")
+                    break
                 except Exception as e:
                     print(f"⚠️  CV frame processing error: {e}")
 
@@ -404,6 +461,20 @@ async def stream_cv_visualization(labeled_device: LabeledDevice, labeled_surface
                 await asyncio.sleep(0.01)  # Very short sleep for responsiveness
 
         finally:
+            # Graceful shutdown sequence
+            print("🧹 Cleaning up CV visualization...")
+            
+            # Signal async tasks to stop
+            shutdown_event.set()
+            
+            # Cancel video task
+            if not video_task.done():
+                video_task.cancel()
+                try:
+                    await asyncio.wait_for(video_task, timeout=1.0)
+                except (asyncio.CancelledError, asyncio.TimeoutError):
+                    pass
+            
             # Signal GUI thread to stop
             stop_event.set()
             try:
@@ -414,8 +485,13 @@ async def stream_cv_visualization(labeled_device: LabeledDevice, labeled_surface
             # Wait for GUI thread to finish
             gui_thread_instance.join(timeout=1.0)
 
+    except asyncio.CancelledError:
+        print(f"🛑 CV visualization cancelled for device {labeled_device.emission_id}")
+        raise
     except Exception as e:
         import traceback
         traceback.print_exc()
-        print(f"❌ Unexpected error in stream_cv_visualization: {e}")
-        return
+        print(f"❌ Unexpected error in CV visualization: {e}")
+        raise
+
+

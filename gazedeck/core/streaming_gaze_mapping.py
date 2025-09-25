@@ -13,6 +13,7 @@ from pupil_labs.realtime_api import (
 import asyncio
 from typing import Dict, Optional, Any
 from typing import NamedTuple
+from contextlib import asynccontextmanager
 
 # internal
 from gazedeck.core.device_labeling import LabeledDevice
@@ -31,111 +32,230 @@ class GazeMappedResult(NamedTuple):
     timestamp: float
     surface_gaze: Dict[str, Optional[GazeMappedSurfaceResult]] # key is surface label, value is GazeMappedSurfaceResult
 
-async def stream_gaze_mapped_data(labeled_device: LabeledDevice, surface_layouts: Dict[int, SurfaceLayoutLabeled], apriltag_params: Dict[str, Any], gaze_filter_alpha: float = 0.25) -> asyncio.Queue[GazeMappedResult]:
-
-    sensor_gaze_url, sensor_video_url, sensor_imu_url = await get_sensor_urls(labeled_device)
-
-    restart_on_disconnect = True
+@asynccontextmanager
+async def create_streaming_context(labeled_device: LabeledDevice, surface_layouts: Dict[int, SurfaceLayoutLabeled], apriltag_params: Dict[str, Any], gaze_filter_alpha: float = 0.25):
+    """
+    Async context manager for streaming gaze mapping resources.
     
-    # We must limit the queue size to avoid memory issues
-    MAX_QUEUE_VIDEO_SIZE = 10
-    MAX_QUEUE_GAZE_SIZE = 256
-
+    Ensures proper cleanup of tasks and queues when streaming stops.
+    Best practice: Use context managers for resource lifecycle management.
+    """
+    sensor_gaze_url, sensor_video_url, sensor_imu_url = await get_sensor_urls(labeled_device)
+    
+    # Optimized queue sizes for real-time processing with backpressure
+    MAX_QUEUE_VIDEO_SIZE = 5   # Smaller video queue for lower latency
+    MAX_QUEUE_GAZE_SIZE = 64   # Reduced gaze queue size for real-time response
+    MAX_QUEUE_RESULT_SIZE = 32 # Result queue with backpressure control
+    
+    # Create queues with proper sizing for real-time processing
     queue_video: asyncio.Queue[VideoFrame] = asyncio.Queue(maxsize=MAX_QUEUE_VIDEO_SIZE)
     queue_gaze: asyncio.Queue[GazeData] = asyncio.Queue(maxsize=MAX_QUEUE_GAZE_SIZE)
-    queue_imu: asyncio.Queue[IMUData] = asyncio.Queue(maxsize=MAX_QUEUE_GAZE_SIZE)
-    # this will be consumed by the caller and we need to pass it to the caller
-    queue_result: asyncio.Queue[GazeMappedResult] = asyncio.Queue(maxsize=MAX_QUEUE_GAZE_SIZE)
+    queue_result: asyncio.Queue[GazeMappedResult] = asyncio.Queue(maxsize=MAX_QUEUE_RESULT_SIZE)
     
-    # Start the video collection tasks
-    asyncio.create_task(
-        enqueue_sensor_data(
-            receive_video_frames(sensor_video_url, run_loop=restart_on_disconnect),
-            queue_video,
-            f"Incoming video (device: {labeled_device.emission_id} {labeled_device.label})",
-        )
-    )
-
-    # Start the gaze collection task
-    asyncio.create_task(
-        enqueue_sensor_data(
-            receive_gaze_data(sensor_gaze_url, run_loop=restart_on_disconnect),
-            queue_gaze,
-            f"Incoming gaze (device: {labeled_device.emission_id} {labeled_device.label})",
-        )
-    )
-
-    # Start the gaze mapping task but don't await it - it runs forever
-    asyncio.create_task(
-        match_and_map_gaze(queue_video, queue_gaze, queue_result, labeled_device.camera_calibration, surface_layouts, apriltag_params, gaze_filter_alpha)
-    )
+    # Shutdown coordination using asyncio.Event (not threading.Event)
+    shutdown_event = asyncio.Event()
     
-    print(f"✅ Gaze mapping task started for device {labeled_device.emission_id} {labeled_device.label}, returning queue")
-    return queue_result
+    tasks = []
+    
+    try:
+        # Start sensor data collection tasks
+        video_task = asyncio.create_task(
+            enqueue_sensor_data(
+                receive_video_frames(sensor_video_url, run_loop=True),
+                queue_video,
+                shutdown_event,
+                f"Incoming video (device: {labeled_device.emission_id} {labeled_device.label})"
+            )
+        )
+        
+        gaze_task = asyncio.create_task(
+            enqueue_sensor_data(
+                receive_gaze_data(sensor_gaze_url, run_loop=True),
+                queue_gaze,
+                shutdown_event,
+                f"Incoming gaze (device: {labeled_device.emission_id} {labeled_device.label})"
+            )
+        )
+        
+        # Start gaze mapping task
+        mapping_task = asyncio.create_task(
+            match_and_map_gaze(
+                queue_video, queue_gaze, queue_result,
+                labeled_device.camera_calibration, surface_layouts,
+                apriltag_params, gaze_filter_alpha, shutdown_event
+            )
+        )
+        
+        tasks = [video_task, gaze_task, mapping_task]
+        
+        print(f"✅ Streaming context initialized for device {labeled_device.emission_id} {labeled_device.label}")
+        
+        yield queue_result, shutdown_event
+        
+    finally:
+        # Graceful shutdown: signal all tasks to stop
+        shutdown_event.set()
+        
+        # Cancel all tasks with proper cleanup
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        
+        # Wait for tasks to complete gracefully
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        
+        print(f"🧹 Streaming context cleaned up for device {labeled_device.emission_id} {labeled_device.label}")
 
-async def match_and_map_gaze(queue_video: asyncio.Queue[VideoFrame], queue_gaze: asyncio.Queue[GazeData], output_queue: asyncio.Queue[GazeMappedResult], camera_distortion: dict, surface_layouts: Dict[int, SurfaceLayoutLabeled], apriltag_params: Dict[str, Any], gaze_filter_alpha: float = 0.25) -> None:
 
+
+async def enqueue_sensor_data(sensor_stream, queue: asyncio.Queue, shutdown_event: asyncio.Event, stream_name: str):
+    """
+    Sensor data enqueuing with graceful shutdown support.
+    
+    Uses asyncio.Event for proper async coordination instead of threading primitives.
+    Implements backpressure handling to prevent memory issues in real-time processing.
+    """
+    try:
+        async for data in sensor_stream:
+            if shutdown_event.is_set():
+                break
+                
+            # Implement backpressure: drop oldest items if queue is full
+            # This prevents blocking in real-time scenarios
+            while queue.full():
+                try:
+                    queue.get_nowait()  # Drop oldest item
+                except asyncio.QueueEmpty:
+                    break
+            
+            try:
+                # Put tuple (timestamp, data) to match expected format
+                queue.put_nowait((data.timestamp_unix_seconds, data))
+            except asyncio.QueueFull:
+                # Should not happen due to backpressure handling above,
+                # but included for robustness
+                pass
+                
+    except asyncio.CancelledError:
+        print(f"📡 {stream_name} cancelled gracefully")
+        raise
+    except Exception as e:
+        print(f"❌ Error in {stream_name}: {e}")
+        raise
+
+
+async def match_and_map_gaze(queue_video: asyncio.Queue[VideoFrame], queue_gaze: asyncio.Queue[GazeData], output_queue: asyncio.Queue[GazeMappedResult], camera_distortion: dict, surface_layouts: Dict[int, SurfaceLayoutLabeled], apriltag_params: Dict[str, Any], gaze_filter_alpha: float, shutdown_event: asyncio.Event) -> None:
+    """
+    Gaze mapping with proper async patterns and graceful shutdown.
+    
+    Uses asyncio.Event for shutdown coordination, implements proper exception handling,
+    optimizes CPU-intensive operations with asyncio.to_thread, and adds backpressure 
+    handling for output queue.
+    """
     print(f"🗺️ Initializing gaze mapper with {len(surface_layouts)} surface layouts")
-
-    # initialize gaze mapper with camera distortion
-    gaze_mapper = GazeMapper(camera_distortion, apriltag_params)
-
-    # Direct mapping using emission_ids - no UUID conversion needed
-    for surface_layout in surface_layouts.values():
-        gaze_mapper.add_surface(
-            surface_layout.tags,
-            surface_layout.size,
-            surface_layout.emission_id  # Use emission_id directly
-        )
-
-    print(f"📋 Surface mapping complete")
-
-    # Initialize gaze filter
-    gaze_filter = ExponentialFilter(alpha=gaze_filter_alpha)
-
-    print("🔄 Starting gaze mapping loop...")
-
-    # SIMPLIFIED IMPLEMENTATION: No caching, immediate surface recalculation per gaze
-    # This ensures no drifting during rapid head movements
-    while True:
-        # Get the most recent video frame and gaze data
-        video_ts, video_item = await get_most_recent_item(queue_video)
-        #gaze_ts, gaze_item = await get_most_recent_item(queue_gaze)
-        gaze_ts, gaze_item = await get_closest_item(queue_gaze, video_ts)
+    
+    try:
+        # Initialize components
+        gaze_mapper = GazeMapper(camera_distortion, apriltag_params)
         
-        # Process video frame for surface detection (no caching)
-        await asyncio.to_thread(gaze_mapper.process_scene, video_item)
+        # Direct mapping using emission_ids - no UUID conversion needed
+        for surface_layout in surface_layouts.values():
+            gaze_mapper.add_surface(
+                surface_layout.tags,
+                surface_layout.size,
+                surface_layout.emission_id
+            )
         
-        # Process gaze using fresh surface detection
-        gaze_mapped_result = await asyncio.to_thread(gaze_mapper.process_gaze, gaze_item)
-
-        if gaze_mapped_result is None or len(gaze_mapped_result.mapped_gaze) == 0:
-            # No surface detected or no valid mapping, emit None for all surfaces
-            surface_gaze: Dict[str, Optional[GazeMappedSurfaceResult]] = {layout.label: None for layout in surface_layouts.values()}
-        else:
-            surface_gaze: Dict[str, Optional[GazeMappedSurfaceResult]] = {}
-            for surface_layout in surface_layouts.values():
-                emission_id = surface_layout.emission_id
-                surface_label = surface_layout.label
-
-                if emission_id in gaze_mapped_result.mapped_gaze and gaze_mapped_result.mapped_gaze[emission_id]:
-                    mapped_data = gaze_mapped_result.mapped_gaze[emission_id][0]
-
-                    # Apply filter
-                    smooth_x, smooth_y = gaze_filter.filter(mapped_data.x, mapped_data.y)
-
-                    surface_gaze[surface_label] = GazeMappedSurfaceResult(
-                        x=smooth_x,
-                        y=smooth_y
-                    )
+        print(f"📋 Surface mapping complete")
+        
+        # Initialize gaze filter
+        gaze_filter = ExponentialFilter(alpha=gaze_filter_alpha)
+        
+        print("🔄 Starting gaze mapping loop...")
+        
+        # Real-time processing loop with proper async patterns
+        while not shutdown_event.is_set():
+            try:
+                # Use asyncio.wait_for for timeout-based processing
+                # This prevents indefinite blocking and allows graceful shutdown
+                video_ts, video_item = await asyncio.wait_for(
+                    get_most_recent_item(queue_video), timeout=0.1
+                )
+                gaze_ts, gaze_item = await asyncio.wait_for(
+                    get_closest_item(queue_gaze, video_ts), timeout=0.1
+                )
+                
+                # Process CPU-intensive operations in thread pool
+                # This is the correct asyncio pattern for blocking operations
+                scene_result = await asyncio.to_thread(gaze_mapper.process_scene, video_item)
+                gaze_mapped_result = await asyncio.to_thread(gaze_mapper.process_gaze, gaze_item)
+                
+                # Build result structure
+                if gaze_mapped_result is None or len(gaze_mapped_result.mapped_gaze) == 0:
+                    surface_gaze: Dict[str, Optional[GazeMappedSurfaceResult]] = {
+                        layout.label: None for layout in surface_layouts.values()
+                    }
                 else:
-                    surface_gaze[surface_label] = None
+                    surface_gaze: Dict[str, Optional[GazeMappedSurfaceResult]] = {}
+                    for surface_layout in surface_layouts.values():
+                        emission_id = surface_layout.emission_id
+                        surface_label = surface_layout.label
+                        
+                        if emission_id in gaze_mapped_result.mapped_gaze and gaze_mapped_result.mapped_gaze[emission_id]:
+                            mapped_data = gaze_mapped_result.mapped_gaze[emission_id][0]
+                            
+                            # Apply smoothing filter
+                            smooth_x, smooth_y = gaze_filter.filter(mapped_data.x, mapped_data.y)
+                            
+                            surface_gaze[surface_label] = GazeMappedSurfaceResult(
+                                x=smooth_x,
+                                y=smooth_y
+                            )
+                        else:
+                            surface_gaze[surface_label] = None
+                
+                result = GazeMappedResult(
+                    timestamp=gaze_ts,
+                    surface_gaze=surface_gaze,
+                )
+                
+                # Implement backpressure for output queue
+                # Drop oldest results if queue is full to maintain real-time performance
+                while output_queue.full():
+                    try:
+                        output_queue.get_nowait()
+                    except asyncio.QueueEmpty:
+                        break
+                
+                try:
+                    output_queue.put_nowait(result)
+                except asyncio.QueueFull:
+                    # Should not happen due to backpressure handling
+                    pass
+                    
+            except asyncio.TimeoutError:
+                # No data available, continue processing
+                # This allows the shutdown check to run periodically
+                continue
+            except asyncio.CancelledError:
+                print("🛑 Gaze mapping cancelled gracefully")
+                break
+            except Exception as e:
+                print(f"⚠️  Error in gaze mapping: {e}")
+                # Continue processing despite errors
+                await asyncio.sleep(0.01)
+                
+    except asyncio.CancelledError:
+        print("🛑 Gaze mapping task cancelled")
+        raise
+    except Exception as e:
+        print(f"❌ Fatal error in gaze mapping: {e}")
+        raise
+    finally:
+        print("🧹 Gaze mapping cleanup complete")
 
-        result = GazeMappedResult(
-            timestamp=gaze_ts,
-            surface_gaze=surface_gaze,
-        )
-        output_queue.put_nowait(result)
+
 
     # ORIGINAL IMPLEMENTATION (commented out for reference):
     # # process gaze and video data
