@@ -10,8 +10,8 @@ async def _describe(dev: Device) -> str:
     Returns device name, IP, battery level, hardware serials, and sensor status.
     """
     try:
-        # Get comprehensive device status
-        status = await dev.get_status()
+        # Get comprehensive device status with timeout to prevent hanging
+        status = await asyncio.wait_for(dev.get_status(), timeout=5.0)
 
         # Basic identification
         device_name = status.phone.device_name or "Unknown Device"
@@ -58,14 +58,22 @@ async def _describe(dev: Device) -> str:
 
         return " | ".join(parts)
 
-    except Exception as e:
-        # Fallback to basic description if status retrieval fails
+    except asyncio.TimeoutError:
+        # Device didn't respond within timeout - likely not running Pupil software
         host = getattr(dev, "dns_name", None) or getattr(dev, "address", None) or "device"
         port = getattr(dev, "port", None)
         name = getattr(dev, "full_name", None)
         if name:
-            return f"{name} ({host}:{port})" if port else f"{name} ({host})"
-        return f"{host}:{port}" if port else str(host)
+            return f"{name} ({host}:{port}) - ⚠️ Device not responding"
+        return f"{host}:{port} - ⚠️ Device not responding"
+    except Exception as e:
+        # Other error - fallback to basic description
+        host = getattr(dev, "dns_name", None) or getattr(dev, "address", None) or "device"
+        port = getattr(dev, "port", None)
+        name = getattr(dev, "full_name", None)
+        if name:
+            return f"{name} ({host}:{port}) - ⚠️ Status unavailable"
+        return f"{host}:{port} - ⚠️ Status unavailable"
 
 async def ask_label_cli(idx: int, dev: Device) -> Optional[str]:
     """
@@ -89,12 +97,9 @@ async def ask_label_cli(idx: int, dev: Device) -> Optional[str]:
             # Simple input with basic timeout handling
             try:
                 result = input(f"Label for device {idx} [{description}] (blank=skip): ")
-                return result
-            except EOFError:
-                print(f"\n❌ EOF detected for device {idx}, skipping...")
-                return ""
-            except KeyboardInterrupt:
-                print(f"\n❌ Keyboard interrupt for device {idx}, skipping...")
+                return result.strip()  # Strip whitespace from input
+            except (EOFError, KeyboardInterrupt):
+                print(f"\n❌ Input interrupted for device {idx}, skipping...")
                 return ""
 
         except Exception as e:

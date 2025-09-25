@@ -141,7 +141,7 @@ async def discover_devices_indexed(duration: float = 3.0) -> Dict[int, Device]:
                 logger.info(f"Successfully connected to device: {name} -> {dev.address}:{dev.port}")
                 by_name.setdefault(name, dev)
             else:
-                logger.warning(f"Failed to connect to any address for {name}")
+                logger.warning(f"Failed to connect to any address for {name} (addresses: {addrs})")
         except Exception as e:
             logger.error(f"Error processing service {name}: {e}")
 
@@ -158,8 +158,15 @@ async def discover_devices_indexed(duration: float = 3.0) -> Dict[int, Device]:
 
     finally:
         logger.debug("Cleaning up discovery resources...")
-        await browser.async_cancel()
-        await azc.async_close()
+        try:
+            await browser.async_cancel()
+        except Exception as e:
+            logger.warning(f"Error canceling browser: {e}")
+
+        try:
+            await azc.async_close()
+        except Exception as e:
+            logger.warning(f"Error closing zeroconf: {e}")
 
     logger.info(f"Discovery complete. Services seen: {services_seen}, Devices connected: {len(by_name)}")
     if by_name:
