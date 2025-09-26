@@ -129,7 +129,7 @@ class MockTracker:
 
         button_name = {Button.left: "left", Button.right: "right", Button.middle: "middle"}.get(self.mouse_button, "unknown")
         print(f"[INIT] Mock tracker {self.device_index} ({self.device_label}) started - click {button_name} mouse button to set gaze position")
-        print(f"📊 Tracking {len(self.surfaces)} surfaces at {self.frequency} Hz with ±{self.noise_level}px noise")
+        print(f"[INIT] Tracking {len(self.surfaces)} surfaces at {self.frequency} Hz with ±{self.noise_level}px noise")
 
         # Start the tracking loop
         self._task = asyncio.create_task(self._tracking_loop())

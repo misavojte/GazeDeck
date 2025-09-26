@@ -57,7 +57,7 @@ async def setup_mock_devices_cli(num_devices: int = 1) -> Dict[int, MockLabeledD
 
                 # Simple input with basic timeout handling
                 try:
-                    result = input(f"Label for mock device [{idx}] [{desc}] (blank=skip): ")
+                    result = input(f"[INPUT] Label for mock device [{idx}] [{desc}] (blank=skip): ")
                     if result.strip():
                         return result.strip()
                     return str(idx)  # Use index as default label
@@ -183,7 +183,7 @@ async def execute_mock(args: argparse.Namespace):
         return
 
     if args.auto_label_surface:
-        print("🤖 Auto-labeling surface layouts...")
+        print("[INIT] Auto-labeling surface layouts...")
         labeled_surface_layouts = await auto_label_surface_layouts(layouts)
         print(f"[INIT] Auto-labeled {len(labeled_surface_layouts)} surface layouts:")
         for idx, layout in labeled_surface_layouts.items():
@@ -222,12 +222,12 @@ async def execute_mock(args: argparse.Namespace):
             trackers.append(tracker)
 
         button_names = ["left", "right", "middle"]
-        print("Mock stream started!")
+        print("[INIT] Mock stream started!")
         for i, device in enumerate(mock_devices.values()):
             button_name = button_names[i]
-            print(f"🖱️  Device {i} ({device.label}): Click {button_name} mouse button to update gaze position")
+            print(f"[MOCK] Device {i} ({device.label}): Click {button_name} mouse button to update gaze position")
 
-        print(f"📊 Emitting at {args.frequency} Hz from {len(mock_devices)} device{'s' if len(mock_devices) > 1 else ''} to all surfaces with random noise")
+        print(f"[INIT] Emitting at {args.frequency} Hz from {len(mock_devices)} device{'s' if len(mock_devices) > 1 else ''} to all surfaces with random noise")
         print("Press Ctrl+C to stop")
 
         # Keep running until interrupted

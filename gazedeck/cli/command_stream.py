@@ -169,7 +169,7 @@ async def execute_stream(args: argparse.Namespace):
         return
 
     if args.auto_label_surface:
-        print("🤖 Auto-labeling surface layouts...")
+        print("[INIT] Auto-labeling surface layouts...")
         labeled_surface_layouts = await auto_label_surface_layouts(layouts)
         print(f"[INIT] Auto-labeled {len(labeled_surface_layouts)} surface layouts:")
         for idx, layout in labeled_surface_layouts.items():
