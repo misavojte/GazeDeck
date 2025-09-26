@@ -64,16 +64,16 @@ async def _describe(dev: Device) -> str:
         port = getattr(dev, "port", None)
         name = getattr(dev, "full_name", None)
         if name:
-            return f"{name} ({host}:{port}) - ⚠️ Device not responding"
-        return f"{host}:{port} - ⚠️ Device not responding"
+            return f"{name} ({host}:{port}) - [WARN] Device not responding"
+        return f"{host}:{port} - [WARN] Device not responding"
     except Exception as e:
         # Other error - fallback to basic description
         host = getattr(dev, "dns_name", None) or getattr(dev, "address", None) or "device"
         port = getattr(dev, "port", None)
         name = getattr(dev, "full_name", None)
         if name:
-            return f"{name} ({host}:{port}) - ⚠️ Status unavailable"
-        return f"{host}:{port} - ⚠️ Status unavailable"
+            return f"{name} ({host}:{port}) - [WARN] Status unavailable"
+        return f"{host}:{port} - [WARN] Status unavailable"
 
 async def ask_label_cli(idx: int, dev: Device) -> Optional[str]:
     """
@@ -91,7 +91,7 @@ async def ask_label_cli(idx: int, dev: Device) -> Optional[str]:
 
             # Check if we have a TTY (interactive terminal)
             if not sys.stdin.isatty():
-                print(f"⚠️  Non-interactive terminal detected for device {idx}, auto-skipping...")
+                print(f"[WARN] Non-interactive terminal detected for device {idx}, auto-skipping...")
                 return ""
 
             # Simple input with basic timeout handling
@@ -99,11 +99,11 @@ async def ask_label_cli(idx: int, dev: Device) -> Optional[str]:
                 result = input(f"Label for device {idx} [{description}] (blank=skip): ")
                 return result.strip()  # Strip whitespace from input
             except (EOFError, KeyboardInterrupt):
-                print(f"\n❌ Input interrupted for device {idx}, skipping...")
+                print(f"\n[ERR] Input interrupted for device {idx}, skipping...")
                 return ""
 
         except Exception as e:
-            print(f"\n❌ Error getting input for device {idx}: {e}, skipping...")
+            print(f"\n[ERR] Error getting input for device {idx}: {e}, skipping...")
             return ""
 
     try:

@@ -55,13 +55,13 @@ def main() -> None:
         try:
             asyncio.run(execute_test_device_discovery(args))
         except (KeyboardInterrupt, asyncio.CancelledError):
-            print("\n🛑 Received keyboard interrupt, exiting gracefully...")
+            print("\n[STOP] Received keyboard interrupt, exiting gracefully...")
             return
     elif args.command == "stream":
         try:
             asyncio.run(execute_stream(args))
         except (KeyboardInterrupt, asyncio.CancelledError):
-            print("\n🛑 Received keyboard interrupt, exiting gracefully...")
+            print("\n[STOP] Received keyboard interrupt, exiting gracefully...")
             # Force immediate cleanup of any remaining sessions
             _cleanup_all_sessions()
             return
@@ -69,7 +69,7 @@ def main() -> None:
         try:
             asyncio.run(execute_mock(args))
         except (KeyboardInterrupt, asyncio.CancelledError):
-            print("\n🛑 Received keyboard interrupt, exiting gracefully...")
+            print("\n[STOP] Received keyboard interrupt, exiting gracefully...")
             return
     elif args.command == "generate-surface":
         execute_generate_surface(args)
@@ -77,7 +77,7 @@ def main() -> None:
         try:
             asyncio.run(execute_test_surface_layout_discovery(args))
         except (KeyboardInterrupt, asyncio.CancelledError):
-            print("\n🛑 Received keyboard interrupt, exiting gracefully...")
+            print("\n[STOP] Received keyboard interrupt, exiting gracefully...")
             return
     else:
         parser.print_help()
@@ -87,12 +87,12 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("\n🛑 Received keyboard interrupt, exiting gracefully...")
+        print("\n[STOP] Received keyboard interrupt, exiting gracefully...")
         _cleanup_all_sessions()
         # Exit cleanly without showing traceback
         exit(0)
     except asyncio.CancelledError:
         # This can occur during shutdown - suppress it
-        print("\n🛑 Shutdown completed")
+        print("\n[STOP] Shutdown completed")
         _cleanup_all_sessions()
         exit(0)

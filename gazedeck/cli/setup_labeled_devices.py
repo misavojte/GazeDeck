@@ -19,7 +19,7 @@ async def setup_labeled_devices_cli(duration: float = 3.0) -> Dict[int, LabeledD
     devices: Dict[int, Device] = await discover_devices_indexed(duration)
 
     if not devices:
-        print("❌ No devices found.")
+        print("[ERR] No devices found.")
         print("   Make sure Pupil Labs devices are powered on and connected to the same network.")
         return {}
 

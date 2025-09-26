@@ -165,28 +165,28 @@ async def execute_stream(args: argparse.Namespace):
     layouts = discover_all_surface_layouts(args.directory)
 
     if not layouts:
-        print("❌ No surface layouts found. Please generate at least one surface layout first.")
+        print("[ERR] No surface layouts found. Please generate at least one surface layout first.")
         return
 
     if args.auto_label_surface:
         print("🤖 Auto-labeling surface layouts...")
         labeled_surface_layouts = await auto_label_surface_layouts(layouts)
-        print(f"📋 Auto-labeled {len(labeled_surface_layouts)} surface layouts:")
+        print(f"[INIT] Auto-labeled {len(labeled_surface_layouts)} surface layouts:")
         for idx, layout in labeled_surface_layouts.items():
             print(f"  [{idx}] {layout.label} -> {layout.id}")
     else:
         labeled_surface_layouts = await setup_labeled_surface_layouts_cli(args.directory)
-        print(f"📋 Found {len(labeled_surface_layouts)} labeled surface layouts: {list(labeled_surface_layouts.keys())}")
+        print(f"[INIT] Found {len(labeled_surface_layouts)} labeled surface layouts: {list(labeled_surface_layouts.keys())}")
 
     if len(labeled_surface_layouts) == 0:
-        print("❌ No labeled surface layouts found. Please generate or label at least one surface layout first.")
+        print("[ERR] No labeled surface layouts found. Please generate or label at least one surface layout first.")
         return
 
     # discover and setup devices
     labeled_devices = await setup_labeled_devices_cli(args.duration)
-    print(f"📋 Found {len(labeled_devices)} labeled devices: {list(labeled_devices.keys())}")
+    print(f"[INIT] Found {len(labeled_devices)} labeled devices: {list(labeled_devices.keys())}")
     if len(labeled_devices) == 0:
-        print("❌ No labeled devices found. Please discover and label at least one device first.")
+        print("[ERR] No labeled devices found. Please discover and label at least one device first.")
         return
 
     # Start WebSocket server
@@ -223,7 +223,7 @@ async def execute_stream(args: argparse.Namespace):
         # Add CV visualization as parallel task if requested
         if args.cv:
             if len(labeled_devices) > 1:
-                print("⚠️  CV visualization currently supports single device only. Using first device.")
+                print("[WARN] CV visualization currently supports single device only. Using first device.")
             first_device = next(iter(labeled_devices.values()))
             cv_task = asyncio.create_task(
                 stream_cv_visualization(first_device, labeled_surface_layouts, apriltag_params, layouts, shutdown_event)
@@ -242,19 +242,19 @@ async def execute_stream(args: argparse.Namespace):
             pass
 
     except KeyboardInterrupt:
-        print("\n🛑 Received keyboard interrupt, initiating graceful shutdown...")
+        print("\n[STOP] Received keyboard interrupt, initiating graceful shutdown...")
         shutdown_event.set()
         
         # Device close is now handled in streaming context cleanup
     except ValueError as e:
-        print(f"❌ ValueError: {e}")
+        print(f"[ERR] ValueError: {e}")
         shutdown_event.set()
     except Exception as e:
-        print(f"❌ Unexpected error: {e}")
+        print(f"[ERR] Unexpected error: {e}")
         shutdown_event.set()
     finally:
         # Graceful shutdown with proper task cancellation
-        print("🛑 Initiating graceful shutdown...")
+        print("[STOP] Initiating graceful shutdown...")
 
         # Cancel all tasks (fire-and-forget)
         for task in stream_tasks:
@@ -279,7 +279,7 @@ async def execute_stream(args: argparse.Namespace):
 
         # Devices already closed in KeyboardInterrupt handler
 
-        print("✅ Streaming stopped gracefully")
+        print("[STOP] Streaming stopped gracefully")
 
 
 
@@ -297,7 +297,7 @@ async def stream_gaze_mapped_data_to_ws(labeled_device: LabeledDevice, labeled_s
     - Proper async context management for resource cleanup
     """
     try:
-        print(f"🎯 Starting gaze streaming for device: {labeled_device.emission_id} {labeled_device.label}")
+        print(f"[INIT] Starting gaze streaming for device: {labeled_device.emission_id} {labeled_device.label}")
         
         # Use the new context manager for proper resource management
         async with create_streaming_context(
@@ -305,7 +305,7 @@ async def stream_gaze_mapped_data_to_ws(labeled_device: LabeledDevice, labeled_s
             apriltag_params, gaze_filter_alpha
         ) as (queue_result, context_shutdown):
             
-            print(f"📡 Streaming context created for device {labeled_device.emission_id} {labeled_device.label}")
+            print(f"[INIT] Streaming context created for device {labeled_device.emission_id} {labeled_device.label}")
             
             # Pre-compute surface ID mapping for performance
             device_id = labeled_device.emission_id
@@ -341,18 +341,18 @@ async def stream_gaze_mapped_data_to_ws(labeled_device: LabeledDevice, labeled_s
                     # No data available, continue to check shutdown
                     continue
                 except asyncio.CancelledError:
-                    print(f"🛑 WebSocket streaming cancelled for device {labeled_device.emission_id}")
+                    print(f"[STOP] WebSocket streaming cancelled for device {labeled_device.emission_id}")
                     break
                     
-            print(f"📊 Processed {message_count} messages for device {labeled_device.emission_id}")
+            print(f"[STOP] Processed {message_count} messages for device {labeled_device.emission_id}")
             
     except asyncio.CancelledError:
-        print(f"🛑 WebSocket streaming task cancelled for device {labeled_device.emission_id}")
+        print(f"[STOP] WebSocket streaming task cancelled for device {labeled_device.emission_id}")
         raise
     except Exception as e:
         import traceback
         traceback.print_exc()
-        print(f"❌ Unexpected error in WebSocket streaming: {e}")
+        print(f"[ERR] Unexpected error in WebSocket streaming: {e}")
         raise
 
 
@@ -374,8 +374,8 @@ async def stream_cv_visualization(labeled_device: LabeledDevice, labeled_surface
     from pupil_labs.realtime_api.streaming import VideoFrame
 
     try:
-        print(f"🎯 Starting CV visualization for device: {labeled_device.emission_id} {labeled_device.label}")
-        print("Press ESC to stop visualization")
+        print(f"[INIT] Starting CV visualization for device: {labeled_device.emission_id} {labeled_device.label}")
+        print("[INFO] Press ESC to stop visualization")
 
         # Get sensor URLs
         sensor_gaze_url, sensor_video_url, sensor_imu_url = await get_sensor_urls(labeled_device)
@@ -404,7 +404,7 @@ async def stream_cv_visualization(labeled_device: LabeledDevice, labeled_surface
         frame_queue: queue.Queue = queue.Queue(maxsize=2)  # Small queue to prevent memory buildup
         stop_event = threading.Event()  # Still use threading.Event for GUI thread coordination
 
-        print("🔄 Starting CV visualization loop...")
+        print("[INIT] Starting CV visualization loop...")
 
         def gui_thread():
             """Separate thread for all OpenCV GUI operations - completely non-blocking."""
@@ -426,14 +426,14 @@ async def stream_cv_visualization(labeled_device: LabeledDevice, labeled_surface
 
                         # Check for ESC key in GUI thread
                         if visualizer.should_close():
-                            print("🛑 Closing CV visualization")
+                            print("[STOP] Closing CV visualization")
                             break
 
                     except queue.Empty:
                         # No new frames, continue GUI event loop
                         continue
                     except Exception as e:
-                        print(f"⚠️  GUI thread error: {e}")
+                        print(f"[WARN] GUI thread error: {e}")
                         break
 
             finally:
@@ -487,17 +487,17 @@ async def stream_cv_visualization(labeled_device: LabeledDevice, labeled_surface
                     # No new frame available, continue processing
                     pass
                 except asyncio.CancelledError:
-                    print("🛑 CV visualization cancelled")
+                    print("[STOP] CV visualization cancelled")
                     break
                 except Exception as e:
-                    print(f"⚠️  CV frame processing error: {e}")
+                    print(f"[WARN] CV frame processing error: {e}")
 
                 # Small sleep to prevent busy waiting
                 await asyncio.sleep(0.01)  # Very short sleep for responsiveness
 
         finally:
             # Graceful shutdown sequence
-            print("🧹 Cleaning up CV visualization...")
+            print("[CLEAN] Cleaning up CV visualization...")
             
             # Signal async tasks to stop
             shutdown_event.set()
@@ -521,12 +521,12 @@ async def stream_cv_visualization(labeled_device: LabeledDevice, labeled_surface
             gui_thread_instance.join(timeout=1.0)
 
     except asyncio.CancelledError:
-        print(f"🛑 CV visualization cancelled for device {labeled_device.emission_id}")
+        print(f"[STOP] CV visualization cancelled for device {labeled_device.emission_id}")
         raise
     except Exception as e:
         import traceback
         traceback.print_exc()
-        print(f"❌ Unexpected error in CV visualization: {e}")
+        print(f"[ERR] Unexpected error in CV visualization: {e}")
         raise
 
 

@@ -62,14 +62,14 @@ async def setup_mock_devices_cli(num_devices: int = 1) -> Dict[int, MockLabeledD
                         return result.strip()
                     return str(idx)  # Use index as default label
                 except EOFError:
-                    print(f"\n❌ EOF detected for device {idx}, using default label '{idx}'...")
+                    print(f"\n[ERR] EOF detected for device {idx}, using default label '{idx}'...")
                     return str(idx)
                 except KeyboardInterrupt:
-                    print(f"\n❌ Keyboard interrupt for device {idx}, using default label '{idx}'...")
+                    print(f"\n[ERR] Keyboard interrupt for device {idx}, using default label '{idx}'...")
                     return str(idx)
 
             except Exception as e:
-                print(f"\n❌ Error getting input for device {idx}: {e}, using default label '{idx}'...")
+                print(f"\n[ERR] Error getting input for device {idx}: {e}, using default label '{idx}'...")
                 return str(idx)
 
         try:
@@ -179,27 +179,27 @@ async def execute_mock(args: argparse.Namespace):
     layouts = discover_all_surface_layouts(args.directory)
 
     if not layouts:
-        print("❌ No surface layouts found. Please generate at least one surface layout first.")
+        print("[ERR] No surface layouts found. Please generate at least one surface layout first.")
         return
 
     if args.auto_label_surface:
         print("🤖 Auto-labeling surface layouts...")
         labeled_surface_layouts = await auto_label_surface_layouts(layouts)
-        print(f"📋 Auto-labeled {len(labeled_surface_layouts)} surface layouts:")
+        print(f"[INIT] Auto-labeled {len(labeled_surface_layouts)} surface layouts:")
         for idx, layout in labeled_surface_layouts.items():
             print(f"  [{idx}] {layout.label} -> {layout.id}")
     else:
         labeled_surface_layouts = await setup_labeled_surface_layouts_cli(args.directory)
-        print(f"📋 Found {len(labeled_surface_layouts)} labeled surface layouts: {list(labeled_surface_layouts.keys())}")
+        print(f"[INIT] Found {len(labeled_surface_layouts)} labeled surface layouts: {list(labeled_surface_layouts.keys())}")
 
     if len(labeled_surface_layouts) == 0:
-        print("❌ No labeled surface layouts found. Please generate or label at least one surface layout first.")
+        print("[ERR] No labeled surface layouts found. Please generate or label at least one surface layout first.")
         return
 
     # Setup mock devices
     mock_devices = await setup_mock_devices_cli(num_devices=args.devices)
     if len(mock_devices) == 0:
-        print("❌ No mock devices labeled.")
+        print("[ERR] No mock devices labeled.")
         return
 
     # Start WebSocket server
@@ -235,14 +235,14 @@ async def execute_mock(args: argparse.Namespace):
             while True:
                 await asyncio.sleep(1)
         except KeyboardInterrupt:
-            print("\n❌ KeyboardInterrupt: Stopping mock stream")
+            print("\n[ERR] KeyboardInterrupt: Stopping mock stream")
 
     except Exception as e:
-        print(f"❌ Unexpected error: {e}")
+        print(f"[ERR] Unexpected error: {e}")
         import traceback
         traceback.print_exc()
     finally:
-        print("🧹 Cleaning up...")
+        print("[CLEAN] Cleaning up...")
         await stop_mock_tracking()  # Stop all trackers
         await stop_ws_server(server, broadcaster_task)
         print("The mock streaming task has stopped")

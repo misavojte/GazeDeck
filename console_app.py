@@ -122,10 +122,10 @@ def execute_command(command_line):
         # argparse uses SystemExit for --help, catch it to continue
         pass
     except KeyboardInterrupt:
-        print("\n\n🛑 Command interrupted by user (Ctrl+C)")
+        print("\n\n[STOP] Command interrupted by user (Ctrl+C)")
         print("Returning to console...")
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"[ERR] Error: {e}")
 
 
 def main():
@@ -158,7 +158,7 @@ def main():
 
         except KeyboardInterrupt:
             # Don't break - just print a newline and continue
-            print("\n🛑 Keyboard interrupt detected, continuing...")
+            print("\n[STOP] Keyboard interrupt detected, continuing...")
             continue
         except EOFError:
             print("\nGoodbye!")

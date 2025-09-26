@@ -82,7 +82,7 @@ class MockTracker:
             surface: Labeled surface layout to track
         """
         self.surfaces[surface.emission_id] = surface
-        print(f"📋 Mock tracker: Added surface '{surface.emission_id} {surface.label}' ({surface.size[0]}x{surface.size[1]})")
+        print(f"[INIT] Mock tracker: Added surface '{surface.emission_id} {surface.label}' ({surface.size[0]}x{surface.size[1]})")
 
     def remove_surface(self, surface_emission_id: int) -> None:
         """
@@ -94,7 +94,7 @@ class MockTracker:
         if surface_emission_id in self.surfaces:
             surface = self.surfaces[surface_emission_id]
             del self.surfaces[surface_emission_id]
-            print(f"📋 Mock tracker: Removed surface '{surface_emission_id} {surface.label}'")
+            print(f"[INIT] Mock tracker: Removed surface '{surface_emission_id} {surface.label}'")
 
     def _on_mouse_click(self, x: float, y: float, button: Button, pressed: bool) -> None:
         """
@@ -118,7 +118,7 @@ class MockTracker:
         Begins mouse listener and starts emitting gaze data at configured frequency.
         """
         if self._running:
-            print("⚠️ Mock tracker already running")
+            print("[WARN] Mock tracker already running")
             return
 
         self._running = True
@@ -157,7 +157,7 @@ class MockTracker:
 
         self.surfaces.clear()  # Clear surface references
 
-        print("🛑 Mock tracker stopped and cleaned up")
+        print("[STOP] Mock tracker stopped and cleaned up")
 
     async def _tracking_loop(self) -> None:
         """
@@ -171,7 +171,7 @@ class MockTracker:
         except asyncio.CancelledError:
             raise
         except Exception as e:
-            print(f"❌ Mock tracker error: {e}")
+            print(f"[ERR] Mock tracker error: {e}")
             raise
 
     async def _emit_gaze_data(self) -> None:

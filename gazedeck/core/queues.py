@@ -41,7 +41,7 @@ async def get_most_recent_item(queue: asyncio.Queue[T], timeout: Optional[float]
                 next_item = queue.get_nowait()
                 # Validate next item as well
                 if not isinstance(next_item, tuple) or len(next_item) != 2:
-                    print(f"⚠️  Invalid queue item format: {type(next_item)} with value: {next_item}")
+                    print(f"[WARN] Invalid queue item format: {type(next_item)} with value: {next_item}")
                     continue
                 item = next_item  # Keep the newer item
             except QueueEmpty:
@@ -55,7 +55,7 @@ async def get_most_recent_item(queue: asyncio.Queue[T], timeout: Optional[float]
         raise
     except Exception as e:
         # Log error with more context for unexpected errors
-        print(f"⚠️  Unexpected error getting most recent item: {type(e).__name__}: {e}")
+        print(f"[WARN] Unexpected error getting most recent item: {type(e).__name__}: {e}")
         raise
 
 async def get_closest_item(queue: asyncio.Queue[T], target_timestamp: float, timeout: Optional[float] = None) -> Tuple[float, T]:
@@ -100,7 +100,7 @@ async def get_closest_item(queue: asyncio.Queue[T], target_timestamp: float, tim
                 
                 # Validate next item format
                 if not isinstance(next_item_tuple, tuple) or len(next_item_tuple) != 2:
-                    print(f"⚠️  Invalid queue item format in closest search: {type(next_item_tuple)} with value: {next_item_tuple}")
+                    print(f"[WARN] Invalid queue item format in closest search: {type(next_item_tuple)} with value: {next_item_tuple}")
                     continue
                     
                 next_item_ts, next_item = next_item_tuple
@@ -124,5 +124,5 @@ async def get_closest_item(queue: asyncio.Queue[T], target_timestamp: float, tim
         raise
     except Exception as e:
         # Log error with more context for unexpected errors
-        print(f"⚠️  Unexpected error getting closest item for timestamp {target_timestamp}: {type(e).__name__}: {e}")
+        print(f"[WARN] Unexpected error getting closest item for timestamp {target_timestamp}: {type(e).__name__}: {e}")
         raise

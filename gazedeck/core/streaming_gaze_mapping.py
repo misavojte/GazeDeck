@@ -88,7 +88,7 @@ async def create_streaming_context(labeled_device: LabeledDevice, surface_layout
         
         tasks = [video_task, gaze_task, mapping_task]
         
-        print(f"✅ Streaming context initialized for device {labeled_device.emission_id} {labeled_device.label}")
+        print(f"[INIT] Streaming context initialized for device {labeled_device.emission_id} {labeled_device.label}")
         
         yield queue_result, shutdown_event
         
@@ -111,7 +111,7 @@ async def create_streaming_context(labeled_device: LabeledDevice, surface_layout
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
         
-        print(f"🧹 Streaming context cleaned up for device {labeled_device.emission_id} {labeled_device.label}")
+        print(f"[CLEAN] Streaming context cleaned up for device {labeled_device.emission_id} {labeled_device.label}")
 
 
 
@@ -144,14 +144,14 @@ async def enqueue_sensor_data(sensor_stream, queue: asyncio.Queue, shutdown_even
                 pass
                 
     except asyncio.CancelledError:
-        print(f"📡 {stream_name} cancelled gracefully")
+        print(f"[STOP] {stream_name} cancelled gracefully")
         raise
     except KeyboardInterrupt:
         # Swallow KeyboardInterrupt inside worker to allow single-pass Ctrl+C
-        print(f"🛑 {stream_name} interrupted")
+        print(f"[STOP] {stream_name} interrupted")
         return
     except Exception as e:
-        print(f"❌ Error in {stream_name}: {e}")
+        print(f"[ERR] Error in {stream_name}: {e}")
         raise
 
 
@@ -163,7 +163,7 @@ async def match_and_map_gaze(queue_video: asyncio.Queue[VideoFrame], queue_gaze:
     optimizes CPU-intensive operations with asyncio.to_thread, and adds backpressure 
     handling for output queue.
     """
-    print(f"🗺️ Initializing gaze mapper with {len(surface_layouts)} surface layouts")
+    print(f"[INIT] Initializing gaze mapper with {len(surface_layouts)} surface layouts")
     
     try:
         # Initialize components
@@ -177,12 +177,12 @@ async def match_and_map_gaze(queue_video: asyncio.Queue[VideoFrame], queue_gaze:
                 surface_layout.emission_id
             )
         
-        print(f"📋 Surface mapping complete")
+        print(f"[INIT] Surface mapping setup complete")
         
         # Initialize gaze filter
         gaze_filter = ExponentialFilter(alpha=gaze_filter_alpha)
         
-        print("🔄 Starting gaze mapping loop...")
+        print("[INIT] Starting gaze mapping loop...")
         
         # Real-time processing loop with proper async patterns
         while not shutdown_event.is_set():
@@ -245,25 +245,25 @@ async def match_and_map_gaze(queue_video: asyncio.Queue[VideoFrame], queue_gaze:
                 # This allows the shutdown check to run periodically
                 continue
             except asyncio.CancelledError:
-                print("🛑 Gaze mapping cancelled gracefully")
+                print("[STOP] Gaze mapping cancelled gracefully")
                 break
             except KeyboardInterrupt:
                 # Swallow KeyboardInterrupt inside worker to allow single-pass Ctrl+C
-                print("🛑 Gaze mapping interrupted")
+                print("[STOP] Gaze mapping interrupted")
                 break
             except Exception as e:
-                print(f"⚠️  Error in gaze mapping: {e}")
+                print(f"[WARN] Error in gaze mapping: {e}")
                 # Continue processing despite errors
                 await asyncio.sleep(0.01)
                 
     except asyncio.CancelledError:
-        print("🛑 Gaze mapping task cancelled")
+        print("[STOP] Gaze mapping task cancelled")
         raise
     except Exception as e:
-        print(f"❌ Fatal error in gaze mapping: {e}")
+        print(f"[ERR] Fatal error in gaze mapping: {e}")
         raise
     finally:
-        print("🧹 Gaze mapping cleanup complete")
+        print("[CLEAN] Gaze mapping cleanup complete")
 
 
 

@@ -61,7 +61,7 @@ def draw_tag_visualization(frame: npt.NDArray[np.uint8],
             corners_int = corners_distorted.astype(int)
             
         except Exception as e:
-            print(f"⚠️  Error processing marker {marker.tag_id}: {e}")
+            print(f"[WARN] Error processing marker {marker.tag_id}: {e}")
             continue
         
         # Draw colored edges
@@ -75,7 +75,7 @@ def draw_tag_visualization(frame: npt.NDArray[np.uint8],
             # Left edge (bottom-left to top-left)
             cv2.line(vis_frame, tuple(corners_int[0]), tuple(corners_int[3]), COLORS['left'], 3)
         except Exception as e:
-            print(f"⚠️  Failed to draw edges for marker {marker.tag_id}: {e}")
+            print(f"[WARN] Failed to draw edges for marker {marker.tag_id}: {e}")
             # Fallback: draw a simple circle
             center = tuple(np.mean(corners_int, axis=0).astype(int))
             cv2.circle(vis_frame, center, 20, (0, 255, 255), 3)

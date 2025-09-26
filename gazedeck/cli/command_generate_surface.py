@@ -121,8 +121,8 @@ def execute_generate_surface(args: argparse.Namespace):
         print("📄 Configuration saved as: surface_layout.yaml")
 
     except ValueError as e:
-        print(f"❌ Error: {e}")
+        print(f"[ERR] Error: {e}")
         return
     except Exception as e:
-        print(f"❌ Unexpected error: {e}")
+        print(f"[ERR] Unexpected error: {e}")
         return
