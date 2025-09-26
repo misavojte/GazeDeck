@@ -16,16 +16,16 @@ async def setup_labeled_surface_layouts_cli(directory: str) -> Dict[int, Surface
     layouts: Dict[int, SurfaceLayout] = discover_all_surface_layouts(directory)
 
     if not layouts:
-        print("No surface layouts found.")
+        print("[ERR] No surface layouts found.")
         return {}
 
     labeled = await label_surface_layouts(layouts, ask_label_cli)
 
     if labeled:
-        print("Labeled surface layouts:")
+        print("[INIT] Labeled surface layouts:")
         for idx, ld in labeled.items():
             print(f"  [{idx}] {ld.label} -> {ld.id}")
     else:
-        print("No surface layouts labeled.")
+        print("[ERR] No surface layouts labeled.")
 
     return labeled

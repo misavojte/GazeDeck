@@ -37,7 +37,7 @@ async def setup_mock_devices_cli(num_devices: int = 1) -> Dict[int, MockLabeledD
     Args:
         num_devices: Number of mock devices to create (1-3)
     """
-    print(f"🎭 Setting up {num_devices} mock device{'s' if num_devices > 1 else ''}...")
+    print(f"[INIT] Setting up {num_devices} mock device{'s' if num_devices > 1 else ''}...")
 
     labeled_devices = {}
     button_names = ["left", "right", "middle"]
@@ -75,7 +75,7 @@ async def setup_mock_devices_cli(num_devices: int = 1) -> Dict[int, MockLabeledD
         try:
             label = await asyncio.wait_for(asyncio.to_thread(_prompt_for_device, device_idx, mock_device_description), timeout=30.0)
         except asyncio.TimeoutError:
-            print(f"\n⏰ Timeout for device {device_idx}, using default label '{device_idx}'...")
+            print(f"\n[WARN] Timeout for device {device_idx}, using default label '{device_idx}'...")
             label = str(device_idx)
 
         if not label.strip():
@@ -90,7 +90,7 @@ async def setup_mock_devices_cli(num_devices: int = 1) -> Dict[int, MockLabeledD
 
         labeled_devices[device_idx] = mock_device
 
-    print("Labeled mock devices:")
+    print("[INIT] Labeled mock devices:")
     for idx, device in labeled_devices.items():
         button_name = button_names[idx]
         print(f"  [{idx}] {device.label} -> {device.name} ({device.ip}) - {button_name} click")
@@ -175,7 +175,7 @@ async def execute_mock(args: argparse.Namespace):
     Execute the mock command with the parsed arguments.
     """
     # Discover and setup surface layouts
-    print("🔍 Discovering surface layouts...")
+    print("[SEARCH] Discovering surface layouts...")
     layouts = discover_all_surface_layouts(args.directory)
 
     if not layouts:
@@ -203,12 +203,12 @@ async def execute_mock(args: argparse.Namespace):
         return
 
     # Start WebSocket server
-    print("🚀 Starting WebSocket server on ws://localhost:8765")
+    print("[INIT] Starting WebSocket server on ws://localhost:8765")
     server, broadcaster_task = await start_ws_server(host="localhost", port=8765)
 
     try:
         # Start mock tracking for all devices
-        print(f"🎯 Starting mock tracking for {len(mock_devices)} device{'s' if len(mock_devices) > 1 else ''} at {args.frequency} Hz with ±{args.noise_level}px noise...")
+        print(f"[INIT] Starting mock tracking for {len(mock_devices)} device{'s' if len(mock_devices) > 1 else ''} at {args.frequency} Hz with ±{args.noise_level}px noise...")
 
         trackers = []
         for device_idx, mock_device in mock_devices.items():

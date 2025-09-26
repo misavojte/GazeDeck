@@ -15,7 +15,7 @@ async def setup_labeled_devices_cli(duration: float = 3.0) -> Dict[int, LabeledD
     Discover devices for `duration` seconds, prompt labels (blank=skip),
     and return labeled devices.
     """
-    print(f"🔍 Discovering devices for {duration}s...")
+    print(f"[SEARCH] Discovering devices for {duration}s...")
     devices: Dict[int, Device] = await discover_devices_indexed(duration)
 
     if not devices:
@@ -26,11 +26,10 @@ async def setup_labeled_devices_cli(duration: float = 3.0) -> Dict[int, LabeledD
     labeled = await label_devices(devices, ask_label_cli)
 
     if labeled:
-        print("Labeled devices:")
+        print("[INIT] Labeled devices:")
         for idx, ld in labeled.items():
             print(f"  [{idx}] {ld.label} -> {ld.name} ({ld.ip})")
     else:
-        print("ℹ️  No devices labeled. This is normal if you pressed Enter/Return to skip labeling.")
-        print("   Labeled devices will be saved automatically for future use.")
+        print("[ERR] No devices labeled. This is normal if you pressed Enter/Return to skip labeling.")
 
     return labeled

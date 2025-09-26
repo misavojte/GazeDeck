@@ -64,9 +64,9 @@ async def execute_test_surface_layout_discovery(args: argparse.Namespace):
     labeled_layouts = await run_discovery_and_label(args.directory)
 
     if len(labeled_layouts) > 0:
-        print(f"Found {len(labeled_layouts)} labeled surface layout(s).")
+        print(f"[INIT] Found {len(labeled_layouts)} labeled surface layout(s).")
     else:
-        print("No labeled surface layouts found.")
+        print("[ERR] No labeled surface layouts found.")
 
     print("Finishing the test. Cleaning up...")
     await cleanup_surface_layouts(labeled_layouts)

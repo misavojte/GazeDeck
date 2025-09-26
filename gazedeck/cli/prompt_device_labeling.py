@@ -96,7 +96,7 @@ async def ask_label_cli(idx: int, dev: Device) -> Optional[str]:
 
             # Simple input with basic timeout handling
             try:
-                result = input(f"Label for device {idx} [{description}] (blank=skip): ")
+                result = input(f"[INPUT] Label for device {idx} [{description}] (blank=skip): ")
                 return result.strip()  # Strip whitespace from input
             except (EOFError, KeyboardInterrupt):
                 print(f"\n[ERR] Input interrupted for device {idx}, skipping...")
@@ -109,5 +109,5 @@ async def ask_label_cli(idx: int, dev: Device) -> Optional[str]:
     try:
         return await asyncio.wait_for(asyncio.to_thread(_prompt), timeout=30.0)
     except asyncio.TimeoutError:
-        print(f"\n⏰ Async timeout for device {idx}, skipping...")
+        print(f"\n[WARN] Async timeout for device {idx}, skipping...")
         return ""

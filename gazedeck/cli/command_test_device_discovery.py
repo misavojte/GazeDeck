@@ -75,9 +75,9 @@ async def execute_test_device_discovery(args: argparse.Namespace):
     labeled_devices = await run_discovery_and_label(args.duration)
 
     if len(labeled_devices) > 0:
-        print(f"Stored {len(labeled_devices)} labeled device(s) in memory.")
+        print(f"[INIT] Stored {len(labeled_devices)} labeled device(s) in memory.")
     else:
-        print("No labeled devices stored.")
+        print("[ERR] No labeled devices stored.")
 
     print("Finishing the test. Cleaning up devices...")
     await cleanup_devices(labeled_devices)

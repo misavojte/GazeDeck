@@ -161,7 +161,7 @@ async def execute_stream(args: argparse.Namespace):
     Execute the stream command with the parsed arguments.
     """
     # discover and setup surface layouts
-    print("🔍 Discovering surface layouts...")
+    print("[SEARCH] Discovering surface layouts...")
     layouts = discover_all_surface_layouts(args.directory)
 
     if not layouts:
@@ -190,7 +190,7 @@ async def execute_stream(args: argparse.Namespace):
         return
 
     # Start WebSocket server
-    print("🚀 Starting WebSocket server on ws://localhost:8765")
+    print("[INIT] Starting WebSocket server on ws://localhost:8765")
     server, broadcaster_task = await start_ws_server(host="localhost", port=8765)
 
     # Set up signal handling for graceful shutdown

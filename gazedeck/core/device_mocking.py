@@ -128,7 +128,7 @@ class MockTracker:
         self._mouse_listener.start()
 
         button_name = {Button.left: "left", Button.right: "right", Button.middle: "middle"}.get(self.mouse_button, "unknown")
-        print(f"🎯 Mock tracker {self.device_index} ({self.device_label}) started - click {button_name} mouse button to set gaze position")
+        print(f"[INIT] Mock tracker {self.device_index} ({self.device_label}) started - click {button_name} mouse button to set gaze position")
         print(f"📊 Tracking {len(self.surfaces)} surfaces at {self.frequency} Hz with ±{self.noise_level}px noise")
 
         # Start the tracking loop

@@ -24,7 +24,7 @@ async def ask_label_cli(idx: int, layout: SurfaceLayout) -> Optional[str]:
 
     def _prompt() -> str:
         try:
-            result = input(f"Label for layout {idx} [{description}] (blank=skip): ")
+            result = input(f"[INPUT] Label for layout {idx} [{description}] (blank=skip): ")
             return result
         except EOFError:
             return ""  # skip on EOF

@@ -95,11 +95,11 @@ def execute_generate_surface(args: argparse.Namespace):
         args: Parsed command line arguments
     """
     try:
-        print(f"Generating surface layout '{args.id}' with {args.rows}x{args.columns} tags...")
-        print(f"Surface size: {args.surface_width}x{args.surface_height}")
-        print(f"Tag size: {args.tag_size}, Margin: {args.margin}")
-        print(f"Starting tag ID: {args.starting_tag_id}")
-        print(f"Output directory: {args.output_dir}")
+        print(f"[INIT] Generating surface layout '{args.id}' with {args.rows}x{args.columns} tags...")
+        print(f"   Surface size: {args.surface_width}x{args.surface_height}")
+        print(f"   Tag size: {args.tag_size}, Margin: {args.margin}")
+        print(f"   Starting tag ID: {args.starting_tag_id}")
+        print(f"   Output directory: {args.output_dir}")
 
         # Generate the surface layout
         layout = generate_surface_layout_from_rows_and_columns(
@@ -115,10 +115,10 @@ def execute_generate_surface(args: argparse.Namespace):
         # Save the layout
         save_surface_layout(layout, args.output_dir)
 
-        print("✅ Surface layout generated successfully!")
-        print(f"📁 Files saved to: {args.output_dir}/{args.id}")
-        print(f"🏷️  Generated {len(layout.tags)} AprilTag markers")
-        print("📄 Configuration saved as: surface_layout.yaml")
+        print("[SUCCESS] Surface layout generated successfully!")
+        print(f"[SUCCESS] Files saved to: {args.output_dir}/{args.id}")
+        print(f"[SUCCESS] Generated {len(layout.tags)} AprilTag markers")
+        print(f"[SUCCESS] Configuration saved as: surface_layout.yaml")
 
     except ValueError as e:
         print(f"[ERR] Error: {e}")
