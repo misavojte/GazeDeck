@@ -1,15 +1,10 @@
 # gazedeck/cli/command_stream.py
 
-# python
 from __future__ import annotations
-
-# external
 import argparse
 import asyncio
 import threading
 import queue
-import atexit
-import weakref
 from typing import Dict, Any
 
 from gazedeck.cli.setup_labeled_devices import setup_labeled_devices_cli
@@ -19,24 +14,6 @@ from gazedeck.core.streaming_gaze_mapping import create_streaming_context
 from gazedeck.core.surface_layout_labeling import SurfaceLayoutLabeled
 from gazedeck.core.surface_layout_discovery import discover_all_surface_layouts, SurfaceLayout
 from gazedeck.core.websocket_server import start_ws_server, stop_ws_server, broadcast_gaze_data
-
-# Global cleanup registry
-_cleanup_refs = weakref.WeakSet()
-
-def _cleanup_all_sessions():
-    """Clean up all aiohttp sessions to prevent unclosed session warnings."""
-    import gc
-
-    # Force garbage collection to close any remaining sessions
-    gc.collect()
-
-    # Additional cleanup for any remaining references
-    _cleanup_refs.clear()
-
-@atexit.register
-def _atexit_cleanup():
-    """Cleanup function registered with atexit to run when program exits."""
-    _cleanup_all_sessions()
 
 def add_stream_parser(subparsers) -> argparse.ArgumentParser:
     """
