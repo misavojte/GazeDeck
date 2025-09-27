@@ -3,7 +3,6 @@
 from __future__ import annotations
 import argparse
 import asyncio
-import threading
 import queue
 from typing import Dict, Any
 
@@ -338,6 +337,7 @@ async def stream_cv_visualization(labeled_device: LabeledDevice, labeled_surface
     and resource cleanup, better integration with asyncio task management,
     and maintains performance optimizations.
     """
+    import threading
     from gazedeck.core.cv_visualizer import CVVisualizer
     from gazedeck.core.camera_distortion import CameraDistortion
     from gazedeck.core.device_senzors import get_sensor_urls
@@ -352,7 +352,7 @@ async def stream_cv_visualization(labeled_device: LabeledDevice, labeled_surface
         print("[INFO] Press ESC to stop visualization")
 
         # Get sensor URLs
-        sensor_gaze_url, sensor_video_url, sensor_imu_url = await get_sensor_urls(labeled_device)
+        _, sensor_video_url, _ = await get_sensor_urls(labeled_device)
 
         # Initialize lightweight video queue (smaller for CV)
         MAX_QUEUE_VIDEO_SIZE = 3  # Smaller queue for faster processing
@@ -422,7 +422,7 @@ async def stream_cv_visualization(labeled_device: LabeledDevice, labeled_surface
             while not shutdown_event.is_set():
                 try:
                     # Get latest video frame (non-blocking with timeout)
-                    video_ts, video_frame = await get_most_recent_item(queue_video, timeout=0.1)
+                    _, video_frame = await get_most_recent_item(queue_video, timeout=0.1)
 
                     frame_count += 1
 
