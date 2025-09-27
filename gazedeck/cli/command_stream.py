@@ -6,20 +6,17 @@ from __future__ import annotations
 # external
 import argparse
 import asyncio
-import json
 import threading
 import queue
 import atexit
 import weakref
-import signal
 from typing import Dict, Any
-from contextlib import asynccontextmanager
 
 from gazedeck.cli.setup_labeled_devices import setup_labeled_devices_cli
 from gazedeck.cli.setup_labeled_surface_layouts import setup_labeled_surface_layouts_cli
 from gazedeck.core.device_labeling import LabeledDevice
-from gazedeck.core.streaming_gaze_mapping import create_streaming_context, enqueue_sensor_data
-from gazedeck.core.surface_layout_labeling import SurfaceLayoutLabeled, label_surface_layouts
+from gazedeck.core.streaming_gaze_mapping import create_streaming_context
+from gazedeck.core.surface_layout_labeling import SurfaceLayoutLabeled
 from gazedeck.core.surface_layout_discovery import discover_all_surface_layouts, SurfaceLayout
 from gazedeck.core.websocket_server import start_ws_server, stop_ws_server, broadcast_gaze_data
 
