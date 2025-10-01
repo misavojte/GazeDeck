@@ -279,14 +279,14 @@ async def stream_gaze_mapped_data_to_ws(labeled_device: LabeledDevice, labeled_s
         ) as (queue_result, context_shutdown):
             
             print(f"[INIT] Streaming context created for device {labeled_device.emission_id} {labeled_device.label}")
-            
+
             # Pre-compute surface ID mapping for performance
             device_id = labeled_device.emission_id
             surface_id_map = {
                 surface_layout.label: surface_layout.emission_id
                 for surface_layout in labeled_surface_layouts.values()
             }
-            
+
             message_count = 0
             
             # Real-time processing loop with proper async patterns
