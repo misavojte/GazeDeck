@@ -65,15 +65,15 @@ def generate_surface_layout_from_rows_and_columns(id: str, rows: int, columns: i
     for row in range(rows):
         for col in range(columns):
             if row == 0 or row == rows - 1 or col == 0 or col == columns - 1:
-                TOP_LEFT_COORD = (col * spacing_x + margin, row * spacing_y + margin)
-                TOP_RIGHT_COORD = (col * spacing_x + tag_size_pixels + margin, row * spacing_y + margin)
-                BOTTOM_LEFT_COORD = (col * spacing_x + margin, row * spacing_y + tag_size_pixels + margin)
-                BOTTOM_RIGHT_COORD = (col * spacing_x + tag_size_pixels + margin, row * spacing_y + tag_size_pixels + margin)
-
                 # AprilTag convention: corners ordered counter-clockwise starting from bottom-left
                 # This matches what the marker detection expects as input
                 # 0: bottom-left, 1: bottom-right, 2: top-right, 3: top-left
-                corners = np.array([BOTTOM_LEFT_COORD, BOTTOM_RIGHT_COORD, TOP_RIGHT_COORD, TOP_LEFT_COORD], dtype=np.float32)
+                corners = np.array([
+                    [col * spacing_x + margin, row * spacing_y + tag_size_pixels + margin],                    # bottom-left
+                    [col * spacing_x + tag_size_pixels + margin, row * spacing_y + tag_size_pixels + margin], # bottom-right
+                    [col * spacing_x + tag_size_pixels + margin, row * spacing_y + margin],                    # top-right
+                    [col * spacing_x + margin, row * spacing_y + margin]                                       # top-left
+                ], dtype=np.float32)
                 tags[tag_id] = TagInfo(size=tag_size_meters, corners=corners)
                 tag_id += 1
 

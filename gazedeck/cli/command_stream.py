@@ -41,19 +41,19 @@ def add_stream_parser(subparsers) -> argparse.ArgumentParser:
 
     # AprilTag detector parameters
     stream_parser.add_argument(
-        "--apriltag-nthreads",
+        "--threads",
         type=int,
         default=2,
         help="Number of threads for AprilTag detection (default: 2).",
     )
     stream_parser.add_argument(
-        "--apriltag-quad-decimate",
+        "--decimate",
         type=float,
         default=2,
         help="Quad decimation factor for AprilTag detection (default: 2 - high decimation for performance).",
     )
     stream_parser.add_argument(
-        "--apriltag-decode-sharpening",
+        "--sharpening",
         type=float,
         default=0.5,
         help="Decode sharpening factor for AprilTag detection (default: 0.5 - enhanced detection).",
@@ -172,9 +172,9 @@ async def execute_stream(args: argparse.Namespace):
 
     try:
         apriltag_params = {
-            'nthreads': args.apriltag_nthreads,
-            'quad_decimate': args.apriltag_quad_decimate,
-            'decode_sharpening': args.apriltag_decode_sharpening,
+            'nthreads': args.threads,
+            'quad_decimate': args.decimate,
+            'decode_sharpening': args.sharpening,
             'quad_sigma': args.apriltag_quad_sigma,
             'debug': args.apriltag_debug,
             # PRECISION PARAMETERS:
@@ -280,14 +280,14 @@ async def stream_gaze_mapped_data_to_ws(labeled_device: LabeledDevice, labeled_s
         ) as (queue_result, context_shutdown):
             
             print(f"[INIT] Streaming context created for device {labeled_device.emission_id} {labeled_device.label}")
-            
+
             # Pre-compute surface ID mapping for performance
             device_id = labeled_device.emission_id
             surface_id_map = {
                 surface_layout.label: surface_layout.emission_id
                 for surface_layout in labeled_surface_layouts.values()
             }
-            
+
             message_count = 0
             
             # Real-time processing loop with proper async patterns

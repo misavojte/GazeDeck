@@ -28,8 +28,27 @@ class CameraDistortion:
         Returns:
             (x, y) coordinates in undistorted image space
         """
-        undistorted = self.undistort_points([gaze])
-        return tuple(undistorted[0])
+        # Optimized single-point undistortion - avoid list overhead
+        undistorted = self.undistort_single_point(gaze)
+        return undistorted
+
+    def undistort_single_point(self, point: tuple[float, float]) -> tuple[float, float]:
+        """
+        Optimized undistortion for single point - avoids list creation and multiple reshapes.
+
+        Args:
+            point: (x, y) coordinates in distorted image space
+
+        Returns:
+            (x, y) coordinates in undistorted image space
+        """
+        # Create array directly for single point - more efficient than list conversion
+        point_array = np.asarray([[point[0], point[1]]], dtype=np.float32).reshape(1, 1, 2)
+
+        undistorted = cv2.undistortPoints(point_array, self._matrix, self._distortion, P=self._matrix)
+        undistorted = undistorted.reshape(-1, 2)[0]  # Extract single point
+
+        return tuple(undistorted)
 
     @property
     def camera_params(self) -> list[float]:

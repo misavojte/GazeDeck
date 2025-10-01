@@ -28,9 +28,10 @@ def calculate_surface_homography(detected_markers: List[DetectedMarker], surface
     Returns:
         3x3 homography matrix or None if insufficient markers detected
     """
-    # Extract marker corners for this surface
-    all_marker_points = []
-    all_surface_points = []
+    # Extract marker corners for this surface efficiently
+    # Collect points more efficiently using numpy operations
+    marker_points_list = []
+    surface_points_list = []
 
     for marker in detected_markers:
         if marker.tag_id in surface_data['markers']:
@@ -39,16 +40,20 @@ def calculate_surface_homography(detected_markers: List[DetectedMarker], surface
             surface_corners = surface_data['markers'][marker.tag_id]  # Already np.ndarray
 
             if len(marker_corners) == len(surface_corners):
-                all_marker_points.extend(marker_corners)
-                all_surface_points.extend(surface_corners)
+                # Use numpy concatenation for better performance than extend
+                marker_points_list.append(marker_corners)
+                surface_points_list.append(surface_corners)
 
-    # STRICT: Need at least 4 corresponding point pairs for reliable homography
-    if len(all_marker_points) < 4:
+    # Early return if insufficient points
+    if len(marker_points_list) < 1 or sum(len(points) for points in marker_points_list) < 4:
         return None
 
-    # Convert to numpy arrays with correct shape for cv2.findHomography
-    marker_points = np.array(all_marker_points, dtype=np.float32)  # Shape: (N, 2)
-    surface_points = np.array(all_surface_points, dtype=np.float32)  # Shape: (N, 2)
+    # Concatenate all marker and surface points efficiently
+    if marker_points_list:
+        marker_points = np.concatenate(marker_points_list).astype(np.float32)
+        surface_points = np.concatenate(surface_points_list).astype(np.float32)
+    else:
+        return None
 
     # Calculate homography matrix with RANSAC to handle outliers
     homography, mask = cv2.findHomography(
@@ -82,14 +87,14 @@ def project_gaze_to_surface(gaze_point: tuple[float, float], homography: np.ndar
         (x, y) coordinates in surface space (0-1 normalized)
     """
     # Create input array with correct shape for cv2.perspectiveTransform
-    # Shape should be (1, 1, 2) for single 2D point
-    gaze_array = np.array([[gaze_point[0], gaze_point[1]]], dtype=np.float32).reshape(1, 1, 2)
+    # Shape should be (1, 1, 2) for single 2D point - use asarray for potential copy avoidance
+    gaze_array = np.asarray([[gaze_point[0], gaze_point[1]]], dtype=np.float32).reshape(1, 1, 2)
 
     # Project to surface coordinates (pixel coordinates)
     projected = cv2.perspectiveTransform(gaze_array, homography)
     pixel_x, pixel_y = projected[0, 0, 0], projected[0, 0, 1]
 
-    # Normalize to 0-1 range
+    # Normalize to 0-1 range - use float division for better precision
     normalized_x = pixel_x / surface_width
     normalized_y = pixel_y / surface_height
 

@@ -197,29 +197,31 @@ async def match_and_map_gaze(queue_video: asyncio.Queue[VideoFrame], queue_gaze:
                 scene_result = await asyncio.to_thread(gaze_mapper.process_scene, video_item)
                 gaze_mapped_result = await asyncio.to_thread(gaze_mapper.process_gaze, gaze_item)
                 
-                # Build result structure
-                if gaze_mapped_result is None or len(gaze_mapped_result.mapped_gaze) == 0:
-                    surface_gaze: Dict[str, Optional[GazeMappedSurfaceResult]] = {
-                        layout.label: None for layout in surface_layouts.values()
-                    }
-                else:
-                    surface_gaze: Dict[str, Optional[GazeMappedSurfaceResult]] = {}
+                # Build result structure efficiently
+                surface_gaze: Dict[str, Optional[GazeMappedSurfaceResult]] = {}
+
+                if gaze_mapped_result is not None:
+                    # Pre-compute surface mappings for faster lookup
                     for surface_layout in surface_layouts.values():
                         emission_id = surface_layout.emission_id
                         surface_label = surface_layout.label
-                        
+
                         if emission_id in gaze_mapped_result.mapped_gaze and gaze_mapped_result.mapped_gaze[emission_id]:
                             mapped_data = gaze_mapped_result.mapped_gaze[emission_id][0]
-                            
+
                             # Apply smoothing filter
                             smooth_x, smooth_y = gaze_filter.filter(mapped_data.x, mapped_data.y)
-                            
+
                             surface_gaze[surface_label] = GazeMappedSurfaceResult(
                                 x=smooth_x,
                                 y=smooth_y
                             )
                         else:
                             surface_gaze[surface_label] = None
+                else:
+                    # No gaze data available - mark all surfaces as None
+                    for surface_layout in surface_layouts.values():
+                        surface_gaze[surface_layout.label] = None
                 
                 result = GazeMappedResult(
                     timestamp=gaze_ts,
