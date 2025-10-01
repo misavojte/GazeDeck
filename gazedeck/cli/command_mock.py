@@ -12,7 +12,7 @@ from typing import NamedTuple
 from gazedeck.cli.setup_labeled_surface_layouts import setup_labeled_surface_layouts_cli
 from gazedeck.core.surface_layout_labeling import SurfaceLayoutLabeled
 from gazedeck.core.surface_layout_discovery import discover_all_surface_layouts, SurfaceLayout
-from gazedeck.core.websocket_server import start_ws_server, stop_ws_server, broadcast_gaze_data
+from gazedeck.core.websocket_server import WebSocketServer
 from gazedeck.core.device_mocking import start_mock_tracking, stop_mock_tracking, get_active_mock_devices
 
 
@@ -202,9 +202,13 @@ async def execute_mock(args: argparse.Namespace):
         print("[ERR] No mock devices labeled.")
         return
 
-    # Start WebSocket server
+    # Create and start WebSocket server
     print("[INIT] Starting WebSocket server on ws://localhost:8765")
-    server, broadcaster_task = await start_ws_server(host="localhost", port=8765)
+    ws_server = WebSocketServer(host="localhost", port=8765)
+    await ws_server.start()
+
+    # Set up signal handling for graceful shutdown
+    shutdown_event = asyncio.Event()
 
     try:
         # Start mock tracking for all devices
@@ -217,7 +221,9 @@ async def execute_mock(args: argparse.Namespace):
                 noise_level=args.noise_level,
                 device_label=mock_device.label,
                 frequency=args.frequency,
-                device_index=device_idx
+                device_index=device_idx,
+                ws_server=ws_server,
+                shutdown_event=shutdown_event
             )
             trackers.append(tracker)
 
@@ -232,17 +238,33 @@ async def execute_mock(args: argparse.Namespace):
 
         # Keep running until interrupted
         try:
-            while True:
-                await asyncio.sleep(1)
+            while not shutdown_event.is_set():
+                await asyncio.sleep(0.1)
         except KeyboardInterrupt:
-            print("\n[ERR] KeyboardInterrupt: Stopping mock stream")
+            print("\n[STOP] Received keyboard interrupt, initiating graceful shutdown...")
+            shutdown_event.set()
 
+    except KeyboardInterrupt:
+        print("\n[STOP] Received keyboard interrupt, initiating graceful shutdown...")
+        shutdown_event.set()
+    except ValueError as e:
+        print(f"[ERR] ValueError: {e}")
+        shutdown_event.set()
     except Exception as e:
         print(f"[ERR] Unexpected error: {e}")
         import traceback
         traceback.print_exc()
+        shutdown_event.set()
     finally:
         print("[CLEAN] Cleaning up...")
-        await stop_mock_tracking()  # Stop all trackers
-        await stop_ws_server(server, broadcaster_task)
+        
+        # Stop WebSocket server first to prevent new broadcasts
+        try:
+            await ws_server.stop()
+        except (Exception, asyncio.CancelledError):
+            pass
+        
+        # Then stop all trackers
+        await stop_mock_tracking()
+        
         print("The mock streaming task has stopped")

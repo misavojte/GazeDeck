@@ -34,7 +34,7 @@ MOUSE_BUTTONS = {
     2: Button.middle  # mousewheel click
 }
 
-from gazedeck.core.websocket_server import broadcast_nowait
+from gazedeck.core.websocket_server import WebSocketServer
 from gazedeck.core.surface_layout_labeling import SurfaceLayoutLabeled
 
 
@@ -46,7 +46,7 @@ class MockTracker:
     to all registered surfaces at configurable frequency.
     """
 
-    def __init__(self, noise_level: float = 20.0, device_label: str = "mock_tracker", frequency: float = 200.0, device_index: int = 0):
+    def __init__(self, noise_level: float = 20.0, device_label: str = "mock_tracker", frequency: float = 200.0, device_index: int = 0, ws_server: WebSocketServer = None, shutdown_event: asyncio.Event = None):
         """
         Initialize the mock tracker.
 
@@ -55,8 +55,12 @@ class MockTracker:
             device_label: Label for this mock device
             frequency: Tracking frequency in Hz (default: 200.0)
             device_index: Index of this device (0=left, 1=right, 2=middle mouse button)
+            ws_server: WebSocket server instance for broadcasting gaze data
+            shutdown_event: Event to signal shutdown
         """
         self.noise_level = noise_level
+        self.ws_server = ws_server
+        self.shutdown_event = shutdown_event
         self.frequency = frequency
         self.sleep_interval = 1.0 / frequency if frequency > 0 else 0.005
         self.device_index = device_index
@@ -164,7 +168,7 @@ class MockTracker:
         Main tracking loop that emits gaze data at configured frequency.
         """
         try:
-            while self._running:
+            while self._running and (self.shutdown_event is None or not self.shutdown_event.is_set()):
                 await self._emit_gaze_data()
                 await asyncio.sleep(self.sleep_interval)
 
@@ -209,21 +213,20 @@ class MockTracker:
             }
 
         # Broadcast binary messages - one per surface (not nested JSON)
-        from .websocket_server import broadcast_gaze_data
+        if self.ws_server is not None:
+            # Use emission_id for WebSocket transmission (no runtime int conversion needed)
+            device_id = self.device_index  # device_index is already the emission_id equivalent for mock devices
 
-        # Use emission_id for WebSocket transmission (no runtime int conversion needed)
-        device_id = self.device_index  # device_index is already the emission_id equivalent for mock devices
+            # Send one binary message per surface
+            for surface_emission_id, surface_result in surface_gaze.items():
+                # surface_emission_id is already an integer, no conversion needed
+                surface_id = surface_emission_id
 
-        # Send one binary message per surface
-        for surface_emission_id, surface_result in surface_gaze.items():
-            # surface_emission_id is already an integer, no conversion needed
-            surface_id = surface_emission_id
+                # Always include coordinates (can be outside 0-1 range)
+                x, y = surface_result["x"], surface_result["y"]
 
-            # Always include coordinates (can be outside 0-1 range)
-            x, y = surface_result["x"], surface_result["y"]
-
-            # Binary serialization - massively more efficient than JSON
-            broadcast_gaze_data(device_id, surface_id, x, y, timestamp)
+                # Binary serialization - massively more efficient than JSON
+                self.ws_server.broadcast_gaze_data(device_id, surface_id, x, y, timestamp)
 
     def config_matches(self, noise_level, device_label, frequency, device_index) -> bool:
         return (self.noise_level == noise_level and
@@ -236,7 +239,7 @@ class MockTracker:
 _mock_trackers: Dict[int, MockTracker] = {}
 
 
-def get_mock_tracker(noise_level: float = 20.0, device_label: str = "mock_tracker", frequency: float = 200.0, device_index: int = 0) -> MockTracker:
+def get_mock_tracker(noise_level: float = 20.0, device_label: str = "mock_tracker", frequency: float = 200.0, device_index: int = 0, ws_server: WebSocketServer = None, shutdown_event: asyncio.Event = None) -> MockTracker:
     """
     Get or create a mock tracker instance for the specified device index.
 
@@ -245,6 +248,8 @@ def get_mock_tracker(noise_level: float = 20.0, device_label: str = "mock_tracke
         device_label: Label for this mock device
         frequency: Tracking frequency in Hz (default: 200.0)
         device_index: Index of this device (0=left, 1=right, 2=middle mouse button)
+        ws_server: WebSocket server instance for broadcasting gaze data
+        shutdown_event: Event to signal shutdown
 
     Returns:
         MockTracker instance
@@ -253,6 +258,9 @@ def get_mock_tracker(noise_level: float = 20.0, device_label: str = "mock_tracke
     if device_index in _mock_trackers:
         existing = _mock_trackers[device_index]
         if existing.config_matches(noise_level, device_label, frequency, device_index):
+            # Update WebSocket server reference and shutdown event
+            existing.ws_server = ws_server
+            existing.shutdown_event = shutdown_event
             return existing
         else:
             # Stop and remove old tracker with different config
@@ -260,7 +268,7 @@ def get_mock_tracker(noise_level: float = 20.0, device_label: str = "mock_tracke
             del _mock_trackers[device_index]
 
     # Create new tracker with correct config
-    _mock_trackers[device_index] = MockTracker(noise_level, device_label, frequency, device_index)
+    _mock_trackers[device_index] = MockTracker(noise_level, device_label, frequency, device_index, ws_server, shutdown_event)
     return _mock_trackers[device_index]
 
 
@@ -268,7 +276,9 @@ async def start_mock_tracking(surfaces: Dict[int, SurfaceLayoutLabeled] | Iterab
                             noise_level: float = 20.0,
                             device_label: str = "mock_tracker",
                             frequency: float = 200.0,
-                            device_index: int = 0) -> MockTracker:
+                            device_index: int = 0,
+                            ws_server: WebSocketServer = None,
+                            shutdown_event: asyncio.Event = None) -> MockTracker:
     """
     Convenience function to start mock tracking for given surfaces.
 
@@ -278,11 +288,13 @@ async def start_mock_tracking(surfaces: Dict[int, SurfaceLayoutLabeled] | Iterab
         device_label: Label for this mock device
         frequency: Tracking frequency in Hz (default: 200.0)
         device_index: Index of this device (0=left, 1=right, 2=middle mouse button)
+        ws_server: WebSocket server instance for broadcasting gaze data
+        shutdown_event: Event to signal shutdown
 
     Returns:
         MockTracker instance (already started)
     """
-    tracker = get_mock_tracker(noise_level, device_label, frequency, device_index)
+    tracker = get_mock_tracker(noise_level, device_label, frequency, device_index, ws_server, shutdown_event)
 
     # Add all surfaces - handle both dict and iterable
     if isinstance(surfaces, dict):

@@ -12,7 +12,7 @@ from gazedeck.core.device_labeling import LabeledDevice
 from gazedeck.core.streaming_gaze_mapping import create_streaming_context
 from gazedeck.core.surface_layout_labeling import SurfaceLayoutLabeled
 from gazedeck.core.surface_layout_discovery import discover_all_surface_layouts, SurfaceLayout
-from gazedeck.core.websocket_server import start_ws_server, stop_ws_server, broadcast_gaze_data
+from gazedeck.core.websocket_server import WebSocketServer
 
 def add_stream_parser(subparsers) -> argparse.ArgumentParser:
     """
@@ -162,9 +162,10 @@ async def execute_stream(args: argparse.Namespace):
         print("[ERR] No labeled devices found. Please discover and label at least one device first.")
         return
 
-    # Start WebSocket server
+    # Create and start WebSocket server
     print("[INIT] Starting WebSocket server on ws://localhost:8765")
-    server, broadcaster_task = await start_ws_server(host="localhost", port=8765)
+    ws_server = WebSocketServer(host="localhost", port=8765)
+    await ws_server.start()
 
     # Set up signal handling for graceful shutdown
     shutdown_event = asyncio.Event()
@@ -188,7 +189,7 @@ async def execute_stream(args: argparse.Namespace):
             task = asyncio.create_task(
                 stream_gaze_mapped_data_to_ws(
                     labeled_device, labeled_surface_layouts,
-                    apriltag_params, args.gaze_filter_alpha, shutdown_event
+                    apriltag_params, args.gaze_filter_alpha, shutdown_event, ws_server
                 )
             )
             stream_tasks.append(task)
@@ -246,7 +247,7 @@ async def execute_stream(args: argparse.Namespace):
 
         # Stop WebSocket server
         try:
-            await stop_ws_server(server, broadcaster_task)
+            await ws_server.stop()
         except (Exception, asyncio.CancelledError):
             pass
 
@@ -256,7 +257,7 @@ async def execute_stream(args: argparse.Namespace):
 
 
 
-async def stream_gaze_mapped_data_to_ws(labeled_device: LabeledDevice, labeled_surface_layouts: Dict[int, SurfaceLayoutLabeled], apriltag_params: Dict[str, Any], gaze_filter_alpha: float, shutdown_event: asyncio.Event):
+async def stream_gaze_mapped_data_to_ws(labeled_device: LabeledDevice, labeled_surface_layouts: Dict[int, SurfaceLayoutLabeled], apriltag_params: Dict[str, Any], gaze_filter_alpha: float, shutdown_event: asyncio.Event, ws_server: WebSocketServer):
     """
     WebSocket streaming with proper async context management.
     
@@ -308,7 +309,7 @@ async def stream_gaze_mapped_data_to_ws(labeled_device: LabeledDevice, labeled_s
                             x, y = surface_result.x, surface_result.y
                         
                         # Binary serialization - massively more efficient than JSON
-                        broadcast_gaze_data(device_id, surface_id, x, y, result.timestamp)
+                        ws_server.broadcast_gaze_data(device_id, surface_id, x, y, result.timestamp)
                         
                 except asyncio.TimeoutError:
                     # No data available, continue to check shutdown

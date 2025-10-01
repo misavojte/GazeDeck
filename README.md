@@ -341,20 +341,24 @@ for device_label, device in devices.items():
 #### WebSocket Server
 
 ```python
-from gazedeck.core.websocket_server import start_ws_server, broadcast_gaze_data
+from gazedeck.core.websocket_server import WebSocketServer
 from datetime import datetime
 
-# Start server
-server, broadcaster_task = await start_ws_server(host="localhost", port=8765)
+# Create and start server
+ws_server = WebSocketServer(host="localhost", port=8765)
+await ws_server.start()
 
 # Broadcast gaze data to all connected clients
-broadcast_gaze_data(
+ws_server.broadcast_gaze_data(
     device_id=1,
     surface_id=2,
     x=0.5,
     y=0.3,
     timestamp=datetime.now()
 )
+
+# Stop server when done
+await ws_server.stop()
 ```
 
 ## Best Practices
