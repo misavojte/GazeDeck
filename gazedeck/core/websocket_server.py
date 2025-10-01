@@ -19,6 +19,7 @@ from typing import Set, Optional
 import websockets
 from websockets.server import WebSocketServerProtocol
 import contextlib
+import logging
 
 # Import binary message serialization
 from .binary_messages import serialize_gaze_message
@@ -122,25 +123,6 @@ class WebSocketServer:
             # Drop message for this client - maintains overall performance
             pass
     
-    async def _safe_client_handler(self, ws: WebSocketServerProtocol) -> None:
-        """
-        Safe client handler that ignores invalid HTTP requests.
-        
-        Why safe handling:
-        - Prevents server crashes from malformed HTTP requests
-        - WebSocket servers should be robust against invalid requests
-        - Graceful degradation maintains service availability
-        """
-        try:
-            await self._client_handler(ws)
-        except websockets.exceptions.InvalidMessage as e:
-            if "did not receive a valid HTTP request" in str(e):
-                # Invalid HTTP request - ignore silently
-                pass
-            else:
-                # Other WebSocket errors - ignore silently
-                pass
-    
     async def start(self) -> None:
         """
         Start the WebSocket server and broadcaster task.
@@ -156,8 +138,13 @@ class WebSocketServer:
         if self._is_running:
             raise RuntimeError("WebSocket server is already running")
         
+        # Suppress websockets library error logging for invalid HTTP methods
+        # This prevents stack traces when clients send POST/PUT/DELETE requests
+        # The server correctly rejects these; we just suppress the noise
+        logging.getLogger('websockets.server').setLevel(logging.CRITICAL)
+        
         self._server = await websockets.serve(
-            self._safe_client_handler, self.host, self.port,
+            self._client_handler, self.host, self.port,
             compression=None,   # save CPU; clients get raw speed
             max_size=None,      # allow large frames if needed
             ping_interval=20.0, # keep connections healthy
