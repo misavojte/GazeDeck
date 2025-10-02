@@ -31,6 +31,119 @@ def enable_discovery_debug_logging():
     zeroconf_logger = logging.getLogger('zeroconf')
     zeroconf_logger.setLevel(logging.INFO)
 
+async def _direct_connect_to_ip(ip: str, timeout: float = 2.0) -> Optional[Device]:
+    """
+    Attempt direct connection to a specific IP address on port 8080.
+
+    Args:
+        ip: IP address to connect to
+        timeout: Connection timeout in seconds
+
+    Returns:
+        Device object if connection successful, None otherwise
+    """
+    try:
+        logger.debug(f"Attempting direct connection to {ip}:8080 (timeout: {timeout}s)")
+        r, w = await asyncio.wait_for(asyncio.open_connection(ip, 8080), timeout=timeout)
+        w.close()
+        with suppress(Exception):
+            await w.wait_closed()
+        logger.debug(f"Successfully connected to {ip}:8080")
+        return Device(address=ip, port=8080)
+    except Exception as e:
+        logger.debug(f"Failed to connect to {ip}:8080: {e}")
+        return None
+
+
+async def _discover_devices_mdns_only(duration: float = 3.0) -> Dict[int, Device]:
+    """
+    mDNS discovery implementation - no fallbacks.
+    Returns devices discovered via mDNS/zeroconf only.
+    """
+    logger.info(f"Starting mDNS device discovery for {duration} seconds...")
+    azc = AsyncZeroconf()  # binds across all local NICs (IPv4/IPv6)
+    by_name: Dict[str, Device] = {}
+    services_seen = 0
+
+    def on_service_state_change(zeroconf, service_type: str, name: str, state_change: ServiceStateChange) -> None:
+        """Synchronous handler that creates async task for processing"""
+        nonlocal services_seen
+        services_seen += 1
+        logger.debug(f"Service state change: {name} -> {state_change}")
+        asyncio.create_task(process_service_change(zeroconf, service_type, name, state_change))
+
+    async def process_service_change(zeroconf, service_type: str, name: str, state_change: ServiceStateChange):
+        """Process service state changes asynchronously"""
+        try:
+            if state_change != ServiceStateChange.Added:
+                logger.debug(f"Ignoring non-added state for {name}: {state_change}")
+                return
+
+            logger.debug(f"Processing service: {name}")
+            if not name.startswith(PL_NAME_PREFIX):
+                logger.debug(f"Ignoring service (wrong prefix): {name}")
+                return
+
+            logger.info(f"Found Pupil Labs device service: {name}")
+
+            info = await azc.async_get_service_info(service_type, name, timeout=3000)
+            if not info:
+                logger.warning(f"Could not get service info for {name}")
+                return
+
+            logger.debug(f"Service info for {name}: port={info.port}, addresses={info.addresses}")
+
+            # Include BOTH IPv4 and IPv6 addresses
+            addrs: List[str] = info.parsed_scoped_addresses() or []
+            if not addrs:
+                logger.warning(f"No addresses found for {name}")
+                return
+
+            logger.info(f"Attempting connection to {name} at addresses: {addrs}, port: {info.port}")
+            dev = await _race_connect(addrs, info.port)
+            if dev:
+                logger.info(f"Successfully connected to device: {name} -> {dev.address}:{dev.port}")
+                by_name.setdefault(name, dev)
+            else:
+                logger.warning(f"Failed to connect to any address for {name} (addresses: {addrs})")
+        except Exception as e:
+            logger.error(f"Error processing service {name}: {e}")
+
+    browser = AsyncServiceBrowser(
+        azc.zeroconf,
+        SERVICE_TYPE,
+        handlers=[on_service_state_change],
+    )
+
+    try:
+        logger.info(f"Browsing for services of type: {SERVICE_TYPE}")
+        # Wait for the full discovery duration
+        await asyncio.sleep(duration)
+
+    finally:
+        logger.debug("Cleaning up mDNS discovery resources...")
+        try:
+            await browser.async_cancel()
+        except Exception as e:
+            logger.warning(f"Error canceling browser: {e}")
+
+        try:
+            await azc.async_close()
+        except Exception as e:
+            logger.warning(f"Error closing zeroconf: {e}")
+
+    logger.info(f"mDNS discovery complete. Services seen: {services_seen}, Devices connected: {len(by_name)}")
+    if by_name:
+        logger.info("Found devices:")
+        for name, dev in by_name.items():
+            logger.info(f"  {name} -> {dev.address}:{dev.port}")
+    else:
+        logger.warning("No devices found during mDNS discovery")
+
+    items = sorted(by_name.items(), key=lambda kv: kv[0])
+    return {i: dev for i, (_, dev) in enumerate(items)}
+
+
 async def _race_connect(all_addrs: List[str], port: int, timeout: float = 2.0) -> Optional[Device]:
     """
     Try all advertised IPs (IPv4 and IPv6) for one service instance in parallel.
@@ -72,109 +185,62 @@ async def _race_connect(all_addrs: List[str], port: int, timeout: float = 2.0) -
             with suppress(Exception):
                 tt.cancel()
 
-async def discover_devices_indexed(duration: float = 3.0) -> Dict[int, Device]:
+async def discover_devices_indexed(duration: float = 3.0, device_ips: List[str] = None) -> Dict[int, Device]:
     """
-    Discover Pupil Labs realtime endpoints via mDNS and return {index: Device}.
+    Discover Pupil Labs realtime endpoints via two distinct modes.
 
-    How it differs from the SDK helper:
-    - We do *not* use `pupil_labs.realtime_api.discovery.discover_devices`
-      because in multi-NIC setups it can miss devices. Instead, we:
-        1) Browse `_http._tcp.local.` across all local interfaces.
-        2) Keep only services whose name starts with `PI monitor:`.
-        3) For each service, *race* all advertised IPv4+IPv6 addresses on the
-           advertised port and build `Device` from the winner.
+    ## Mode 1: Manual IP Connection
+    When `device_ips` is provided, connects directly to specified IP addresses.
+    - Fastest option for mobile hotspots where mDNS fails
+    - No discovery overhead - direct TCP connections only
+    - Useful when you know the device IP addresses
 
-    Discovery behavior:
-    - Waits for the full `duration` seconds to discover all available devices
-    - After the discovery period, waits 0.5 additional seconds to finish
-      connecting to any devices that were in the process of being discovered.
+    Usage: discover_devices_indexed(device_ips=["192.168.1.100", "10.0.0.50"])
 
-    Deterministic output:
-    - We dedupe by service instance name and return a stable index ordered by name.
+    ## Mode 2: Automatic mDNS Discovery
+    When `device_ips` is None, uses mDNS/zeroconf for automatic discovery.
+    - Works on normal networks where devices advertise via mDNS
+    - No fallback mechanisms - fails if mDNS is blocked (e.g., mobile hotspots)
+    - Traditional approach for standard network environments
 
-    Note:
-    - mDNS must be delivered on the local link. If multicast is blocked, no
-      mDNS-based approach will discover the device; use direct IP in such cases.
+    Usage: discover_devices_indexed(duration=5.0)
+
+    ## CLI Integration
+    - Use `--device-ips 192.168.1.100` for manual mode
+    - Omit flag for automatic mDNS discovery
+
+    ## Network Compatibility
+    - Manual mode: Works in mobile hotspots and restricted networks
+    - Automatic mode: Requires mDNS multicast support (standard WiFi networks)
+    - No hybrid fallbacks - each mode is standalone and optimized
+
+    Args:
+        duration: Discovery timeout in seconds (mDNS mode) or connection timeout (manual mode)
+        device_ips: List of IP addresses for direct connection. If provided, skips mDNS entirely.
+
+    Returns:
+        Dictionary of {index: Device} for consistent selection across both modes.
     """
-    logger.info(f"Starting device discovery for {duration} seconds...")
-    azc = AsyncZeroconf()  # binds across all local NICs (IPv4/IPv6)
-    by_name: Dict[str, Device] = {}
-    services_seen = 0
-
-    def on_service_state_change(zeroconf, service_type: str, name: str, state_change: ServiceStateChange) -> None:
-        """Synchronous handler that creates async task for processing"""
-        nonlocal services_seen
-        services_seen += 1
-        logger.debug(f"Service state change: {name} -> {state_change}")
-        asyncio.create_task(process_service_change(zeroconf, service_type, name, state_change))
-
-    async def process_service_change(zeroconf, service_type: str, name: str, state_change: ServiceStateChange):
-        """Process service state changes asynchronously"""
-        try:
-            if state_change != ServiceStateChange.Added:
-                logger.debug(f"Ignoring non-added state for {name}: {state_change}")
-                return
-            
-            logger.debug(f"Processing service: {name}")
-            if not name.startswith(PL_NAME_PREFIX):
-                logger.debug(f"Ignoring service (wrong prefix): {name}")
-                return
-            
-            logger.info(f"Found Pupil Labs device service: {name}")
-            
-            info = await azc.async_get_service_info(service_type, name, timeout=3000)  # 3 second timeout
-            if not info:
-                logger.warning(f"Could not get service info for {name}")
-                return
-
-            logger.debug(f"Service info for {name}: port={info.port}, addresses={info.addresses}")
-
-            # Include BOTH IPv4 and IPv6 addresses
-            addrs: List[str] = info.parsed_scoped_addresses() or []
-            if not addrs:
-                logger.warning(f"No addresses found for {name}")
-                return
-
-            logger.info(f"Attempting connection to {name} at addresses: {addrs}, port: {info.port}")
-            dev = await _race_connect(addrs, info.port)
-            if dev:
-                logger.info(f"Successfully connected to device: {name} -> {dev.address}:{dev.port}")
-                by_name.setdefault(name, dev)
+    # Mode selection based on device_ips parameter
+    if device_ips:
+        # Manual IP mode: Direct connection only
+        logger.info(f"Manual IP mode: connecting to {device_ips} (timeout: {duration}s)")
+        devices = {}
+        for i, ip in enumerate(device_ips):
+            device = await _direct_connect_to_ip(ip.strip(), timeout=duration)
+            if device:
+                devices[i] = device
+                logger.info(f"Successfully connected to {ip}")
             else:
-                logger.warning(f"Failed to connect to any address for {name} (addresses: {addrs})")
-        except Exception as e:
-            logger.error(f"Error processing service {name}: {e}")
+                logger.warning(f"Failed to connect to {ip}")
 
-    browser = AsyncServiceBrowser(
-        azc.zeroconf,
-        SERVICE_TYPE,
-        handlers=[on_service_state_change],
-    )
+        if devices:
+            logger.info(f"Manual mode found {len(devices)} devices")
+        else:
+            logger.warning("Manual mode: No devices connected successfully")
+        return devices
 
-    try:
-        logger.info(f"Browsing for services of type: {SERVICE_TYPE}")
-        # Wait for the full discovery duration
-        await asyncio.sleep(duration)
-
-    finally:
-        logger.debug("Cleaning up discovery resources...")
-        try:
-            await browser.async_cancel()
-        except Exception as e:
-            logger.warning(f"Error canceling browser: {e}")
-
-        try:
-            await azc.async_close()
-        except Exception as e:
-            logger.warning(f"Error closing zeroconf: {e}")
-
-    logger.info(f"Discovery complete. Services seen: {services_seen}, Devices connected: {len(by_name)}")
-    if by_name:
-        logger.info("Found devices:")
-        for name, dev in by_name.items():
-            logger.info(f"  {name} -> {dev.address}:{dev.port}")
     else:
-        logger.warning("No devices found during discovery")
-
-    items = sorted(by_name.items(), key=lambda kv: kv[0])
-    return {i: dev for i, (_, dev) in enumerate(items)}
+        # Automatic mode: mDNS discovery only (no fallbacks)
+        logger.info(f"Automatic mDNS discovery mode: scanning for {duration}s")
+        return await _discover_devices_mdns_only(duration)

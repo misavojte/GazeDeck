@@ -10,17 +10,30 @@ from gazedeck.core.device_labeling import LabeledDevice, label_devices
 from gazedeck.cli.prompt_device_labeling import ask_label_cli
 
 
-async def setup_labeled_devices_cli(duration: float = 3.0) -> Dict[int, LabeledDevice]:
+async def setup_labeled_devices_cli(duration: float = 3.0, device_ips: List[str] = None) -> Dict[int, LabeledDevice]:
     """
     Discover devices for `duration` seconds, prompt labels (blank=skip),
     and return labeled devices.
+
+    Args:
+        duration: Time in seconds for discovery (mDNS mode) or connection timeout (manual mode)
+        device_ips: Optional list of IP addresses for direct connection
     """
-    print(f"[SEARCH] Discovering devices for {duration}s...")
-    devices: Dict[int, Device] = await discover_devices_indexed(duration)
+    if device_ips:
+        print(f"[DIRECT] Connecting directly to IP addresses: {device_ips}")
+    else:
+        print(f"[SEARCH] Discovering devices for {duration}s...")
+
+    devices: Dict[int, Device] = await discover_devices_indexed(duration, device_ips)
 
     if not devices:
-        print("[ERR] No devices found.")
-        print("   Make sure Pupil Labs devices are powered on and connected to the same network.")
+        if device_ips:
+            print(f"[ERR] No devices found at specified IP addresses: {device_ips}")
+            print("   Make sure the IP addresses are correct and devices are powered on.")
+        else:
+            print("[ERR] No devices found.")
+            print("   Make sure Pupil Labs devices are powered on and connected to the same network.")
+            print("   If you are using a multi-NIC host, please use the --device-ips flag to specify the IP addresses of the devices.")
         return {}
 
     labeled = await label_devices(devices, ask_label_cli)
