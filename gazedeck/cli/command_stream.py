@@ -44,7 +44,7 @@ def add_stream_parser(subparsers) -> argparse.ArgumentParser:
         nargs="+",
         help="Space-separated list of IP addresses to connect to directly. "
              "Skips automatic discovery and connects directly to these IPs. "
-             "Useful when mDNS discovery is blocked (e.g. mobile hotspots).",
+             "Useful when mDNS discovery is blocked (e.g. mobile hotspots). "
              "Example: --device-ips 192.168.1.100 10.0.0.50",
     )
 
@@ -168,11 +168,7 @@ async def execute_stream(args: argparse.Namespace):
     labeled_devices = await setup_labeled_devices_cli(args.duration, getattr(args, 'device_ips', None))
     print(f"[INIT] Found {len(labeled_devices)} labeled devices: {list(labeled_devices.keys())}")
     if len(labeled_devices) == 0:
-        if getattr(args, 'device_ips', None):
-            print(f"[ERR] No devices found at specified IP addresses: {args.device_ips}")
-            print("   Make sure the IP addresses are correct and devices are powered on.")
-        else:
-            print("[ERR] No labeled devices found. Please discover and label at least one device first.")
+        print("[ERR] No labeled devices found. Please discover and label at least one device first.")
         return
 
     # Create and start WebSocket server

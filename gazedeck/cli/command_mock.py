@@ -237,16 +237,14 @@ async def execute_mock(args: argparse.Namespace):
         print("Press Ctrl+C to stop")
 
         # Keep running until interrupted
-        try:
-            while not shutdown_event.is_set():
+        while not shutdown_event.is_set():
+            try:
                 await asyncio.sleep(0.1)
-        except KeyboardInterrupt:
-            print("\n[STOP] Received keyboard interrupt, initiating graceful shutdown...")
-            shutdown_event.set()
+            except KeyboardInterrupt:
+                print("\n[STOP] Received keyboard interrupt, initiating graceful shutdown...")
+                shutdown_event.set()
+                break
 
-    except KeyboardInterrupt:
-        print("\n[STOP] Received keyboard interrupt, initiating graceful shutdown...")
-        shutdown_event.set()
     except ValueError as e:
         print(f"[ERR] ValueError: {e}")
         shutdown_event.set()

@@ -1,18 +1,14 @@
 # gazedeck/core/device_mocking.py
 
 """
-Mock gaze tracker that simulates cursor position tracking at 200 Hz.
+Simple mock gaze tracker that updates position only on mouse clicks.
 
 Design:
-- Tracks mouse cursor position with random noise (±20px)
-- Emits normalized coordinates to all labeled surfaces at 200 Hz (5ms intervals)
-- Position updates are triggered by left mouse clicks
-- Integrates with existing WebSocket broadcasting system
-- Thread-safe and runs asynchronously
+- Updates position only when mouse is clicked
+- Reuses the same position for all 200 Hz emissions until next click
+- No queues, no complex threading - just stores last clicked position
+- Coordinates normalized to surface bounds (0.0 = top/left edge, 1.0 = bottom/right edge)
 
-Coordinates: Normalized to surface bounds (0.0 = top/left edge, 1.0 = bottom/right edge)
-- Values can be outside 0.0-1.0 range when gaze is outside surface bounds
-- Always includes coordinate data regardless of surface bounds
 Requires: pynput (pip install pynput)
 """
 
@@ -20,7 +16,6 @@ from __future__ import annotations
 
 import asyncio
 import random
-import threading
 import time
 from typing import Dict, Optional, Iterable
 
@@ -40,10 +35,10 @@ from gazedeck.core.surface_layout_labeling import SurfaceLayoutLabeled
 
 class MockTracker:
     """
-    Mock gaze tracker that simulates high-frequency cursor tracking.
+    Simple mock gaze tracker that updates position only on mouse clicks.
 
-    Tracks mouse position and emits gaze data with configurable noise
-    to all registered surfaces at configurable frequency.
+    Stores the clicked position and reuses it for all emissions until next click.
+    No queues or complex threading - just stores the last position.
     """
 
     def __init__(self, noise_level: float = 20.0, device_label: str = "mock_tracker", frequency: float = 200.0, device_index: int = 0, ws_server: WebSocketServer = None, shutdown_event: asyncio.Event = None):
@@ -65,18 +60,14 @@ class MockTracker:
         self.sleep_interval = 1.0 / frequency if frequency > 0 else 0.005
         self.device_index = device_index
         self.mouse_button = MOUSE_BUTTONS.get(device_index, Button.left)
-        self.current_position = (0.0, 0.0)
         self.surfaces: Dict[int, SurfaceLayoutLabeled] = {}
         self.device_label = device_label
         self._running = False
         self._task: Optional[asyncio.Task] = None
         self._mouse_listener = None
 
-        # Mouse position tracking
-        self._mouse_controller = mouse.Controller()
-
-        # Threading lock for position updates
-        self._position_lock = threading.Lock()
+        # Simple position storage - no queue needed
+        self.current_position = (0.0, 0.0)
 
     def add_surface(self, surface: SurfaceLayoutLabeled) -> None:
         """
@@ -110,10 +101,10 @@ class MockTracker:
             pressed: True if pressed, False if released
         """
         if button == self.mouse_button and pressed:
-            with self._position_lock:
-                self.current_position = (float(x), float(y))
-                button_name = {Button.left: "left", Button.right: "right", Button.middle: "middle"}.get(button, "unknown")
-                print(f"🖱️ Mock tracker {self.device_index} ({self.device_label}): Position updated to ({x:.1f}, {y:.1f}) via {button_name} click")
+            # Simply store the position - no queue needed
+            self.current_position = (float(x), float(y))
+            button_name = {Button.left: "left", Button.right: "right", Button.middle: "middle"}.get(button, "unknown")
+            print(f"[MOCK] Tracker {self.device_index} ({self.device_label}): Position updated to ({x:.1f}, {y:.1f}) via {button_name} click")
 
     async def start_tracking(self) -> None:
         """
@@ -127,9 +118,14 @@ class MockTracker:
 
         self._running = True
 
-        # Start mouse listener in background thread
-        self._mouse_listener = mouse.Listener(on_click=self._on_mouse_click)
-        self._mouse_listener.start()
+        # Start mouse listener - no background thread needed
+        try:
+            self._mouse_listener = mouse.Listener(on_click=self._on_mouse_click)
+            self._mouse_listener.start()
+        except Exception as e:
+            print(f"[ERR] Failed to start mouse listener: {e}")
+            self._running = False
+            raise
 
         button_name = {Button.left: "left", Button.right: "right", Button.middle: "middle"}.get(self.mouse_button, "unknown")
         print(f"[INIT] Mock tracker {self.device_index} ({self.device_label}) started - click {button_name} mouse button to set gaze position")
@@ -153,13 +149,13 @@ class MockTracker:
                 await self._task
             except asyncio.CancelledError:
                 pass
-            self._task = None  # Clear reference
+            self._task = None
 
         if self._mouse_listener:
             self._mouse_listener.stop()
-            self._mouse_listener = None  # Clear reference
+            self._mouse_listener = None
 
-        self.surfaces.clear()  # Clear surface references
+        self.surfaces.clear()
 
         print("[STOP] Mock tracker stopped and cleaned up")
 
@@ -185,9 +181,8 @@ class MockTracker:
         if not self.surfaces:
             return
 
-        # Get current position with thread safety
-        with self._position_lock:
-            base_x, base_y = self.current_position
+        # Get current position (simply stored, no queue needed)
+        base_x, base_y = self.current_position
 
         # Generate timestamp
         timestamp = time.time()
@@ -228,12 +223,6 @@ class MockTracker:
                 # Binary serialization - massively more efficient than JSON
                 self.ws_server.broadcast_gaze_data(device_id, surface_id, x, y, timestamp)
 
-    def config_matches(self, noise_level, device_label, frequency, device_index) -> bool:
-        return (self.noise_level == noise_level and
-                self.device_label == device_label and
-                self.frequency == frequency and
-                self.device_index == device_index)
-
 
 # Global instances for multiple trackers
 _mock_trackers: Dict[int, MockTracker] = {}
@@ -257,15 +246,10 @@ def get_mock_tracker(noise_level: float = 20.0, device_label: str = "mock_tracke
     global _mock_trackers
     if device_index in _mock_trackers:
         existing = _mock_trackers[device_index]
-        if existing.config_matches(noise_level, device_label, frequency, device_index):
-            # Update WebSocket server reference and shutdown event
-            existing.ws_server = ws_server
-            existing.shutdown_event = shutdown_event
-            return existing
-        else:
-            # Stop and remove old tracker with different config
-            asyncio.run(existing.stop_tracking()) # Use asyncio.run to await cancellation
-            del _mock_trackers[device_index]
+        # Update WebSocket server reference and shutdown event
+        existing.ws_server = ws_server
+        existing.shutdown_event = shutdown_event
+        return existing
 
     # Create new tracker with correct config
     _mock_trackers[device_index] = MockTracker(noise_level, device_label, frequency, device_index, ws_server, shutdown_event)

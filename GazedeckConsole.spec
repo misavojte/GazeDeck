@@ -22,7 +22,10 @@ a = Analysis(
         'websockets',
         'cv2',
         'yaml',
-        'pynput'
+        'pynput',
+        'zeroconf',
+        'zeroconf._utils.ipaddress',
+        'zeroconf._handlers.answers'
     ],
     hookspath=[],
     hooksconfig={},
