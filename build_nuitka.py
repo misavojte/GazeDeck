@@ -148,7 +148,6 @@ def build_with_nuitka():
         # Windows options (console app with icon disabled by default)
         cmd.extend([
             "--windows-console-mode=force",
-            "--windows-icon-from-ico=None",
         ])
 
     # Include websockets.legacy explicitly to fix compilation issue
