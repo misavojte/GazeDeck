@@ -5,9 +5,7 @@ a = Analysis(
     ['console_app.py'],
     pathex=[],
     binaries=[
-        ('.venv/lib/python3.11/site-packages/pupil_apriltags/lib/libapriltag.3.dylib', 'pupil_apriltags/lib'),
-        ('.venv/lib/python3.11/site-packages/pupil_apriltags/lib/libapriltag.dylib', 'pupil_apriltags/lib'),
-        ('.venv/lib/python3.11/site-packages/pupil_apriltags/lib/libapriltag.3.1.0.dylib', 'pupil_apriltags/lib'),
+        ('.venv/Lib/site-packages/pupil_apriltags/lib/apriltag.dll', 'pupil_apriltags/lib'),
     ],
     datas=[],
     hiddenimports=[

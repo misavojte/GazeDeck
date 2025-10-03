@@ -20,6 +20,7 @@ def install_pyinstaller():
 def detect_platform():
     """Detect the current platform and return platform-specific info."""
     system = platform.system().lower()
+    python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
 
     if system == "windows":
         return {
@@ -33,7 +34,7 @@ def detect_platform():
             "platform": "macos",
             "lib_extension": ".dylib",
             "lib_name": "libapriltag.dylib",
-            "venv_path": ".venv/lib/python3.11/site-packages"
+            "venv_path": f".venv/lib/python{python_version}/site-packages"
         }
     else:
         raise NotImplementedError(f"Platform {system} is not supported yet")
@@ -67,30 +68,23 @@ def update_spec_file(platform_info, libraries):
     for lib_path in libraries:
         # Convert absolute path to relative path for PyInstaller
         rel_path = os.path.relpath(lib_path)
+        # Use forward slashes for PyInstaller compatibility on Windows only
+        if platform_info['platform'] == 'windows':
+            rel_path = rel_path.replace('\\', '/')
         binaries_section += f"        ('{rel_path}', 'pupil_apriltags/lib'),\n"
 
     binaries_section += "    ],"
 
-    # Replace the binaries section in the spec file
-    old_binaries_pattern = r"    binaries=\[.*?\],"
-    new_content = content.replace(
-        "    binaries=[\n        ('.venv/Lib/site-packages/pupil_apriltags/lib/apriltag.dll', 'pupil_apriltags/lib'),\n    ],",
-        binaries_section
-    )
+    # Use regex to find and replace the entire binaries section
+    import re
+    pattern = r"    binaries=\[.*?\],"
+    new_content = re.sub(pattern, binaries_section, content, flags=re.DOTALL)
 
     # Write back the updated spec file
     with open(spec_file, 'w') as f:
         f.write(new_content)
 
     print(f"Updated spec file for {platform_info['platform']} with {len(libraries)} library files")
-
-    # Show what would happen on Windows for comparison
-    if platform_info['platform'] == 'macos':
-        print("\nOn Windows, this build script would:")
-        print("- Detect Windows platform")
-        print("- Look for: .venv/Lib/site-packages/pupil_apriltags/lib/apriltag.dll")
-        print("- Update spec file with Windows DLL path")
-        print("- Build executable at: dist/GazedeckConsole/GazedeckConsole.exe")
 
 def build_executable():
     """Build the executable using PyInstaller."""
