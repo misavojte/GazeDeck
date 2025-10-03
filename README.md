@@ -80,7 +80,11 @@ The `build_console_app.py` script automatically detects your platform and config
 3. **Start Streaming**:
 
    ```bash
-   python -m gazedeck stream --directory output --duration 10
+   # Real devices
+   python -m gazedeck stream --directory output --duration 3
+   
+   # OR simulate with mouse clicks (no hardware required)
+   python -m gazedeck mock --directory output --auto-label-surface
    ```
 
 4. **Test Surface Layout Discovery**:
@@ -199,6 +203,27 @@ python -m gazedeck stream --cv
 
 The visualization works with the original distorted camera coordinates, ensuring accurate overlay on the live video feed. WebSocket streaming continues normally even with CV visualization enabled.
 
+#### Mock Gaze Data
+
+Simulate gaze using mouse clicks and broadcast over WebSocket with realistic noise.
+
+```bash
+# Basic mock (single device, left mouse button)
+python -m gazedeck mock --directory ./output
+
+# Two mock devices (left/right mouse buttons), higher rate, custom noise
+python -m gazedeck mock \
+  --directory ./output \
+  --devices 2 \
+  --frequency 200 \
+  --noise-level 20 \
+  --auto-label-surface
+```
+
+- Left device uses the left mouse button, second device uses right, third uses middle.
+- Each click updates the current gaze position; emissions continue at the set frequency until the next click.
+- Requires `pynput` (`pip install pynput`).
+
 ### Generated Files Structure
 
 After generating a surface layout, you'll find:
@@ -307,13 +332,27 @@ ws.onmessage = (event) => {
 | Option | Default | Description |
 |--------|---------|-------------|
 | `--directory` | . | Directory to search for surface layouts |
-| `--duration` | 10.0 | Device discovery window in seconds (mDNS mode) or connection timeout (direct IP mode) |
-| `--device-ips` | - | Space-separated list of IP addresses for direct connection (skips mDNS discovery) |
-| `--threads` | 4 | Number of threads for AprilTag detection |
-| `--decimate` | 1.0 | Quad decimation factor for AprilTag detection |
-| `--sharpening` | 0.0 | Decode sharpening factor for AprilTag detection |
+| `--duration` | 3.0 | Device discovery window (mDNS) or connection timeout (direct IP) in seconds |
+| `--device-ips` | - | Space-separated list of IPs for direct connection (skips mDNS) |
+| `--threads` | 2 | Number of threads for AprilTag detection |
+| `--decimate` | 2.0 | Quad decimation factor for AprilTag detection |
+| `--sharpening` | 0.5 | Decode sharpening factor for AprilTag detection |
 | `--apriltag-quad-sigma` | 0.0 | Quad sigma factor for AprilTag detection |
 | `--apriltag-debug` | 0 | Debug level for AprilTag detection |
+| `--apriltag-refine-edges` | 1 | Enable sub-pixel edge refinement (0/1) |
+| `--gaze-filter-alpha` | 0.8 | Exponential smoothing alpha for gaze filter (0.0-1.0) |
+| `--auto-label-surface` | false | Auto-label surfaces using their IDs (no prompt) |
+| `--cv` | false | Enable live OpenCV visualization in parallel |
+
+### Mock Command
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--directory` | . | Directory to search for surface layouts |
+| `--noise-level` | 20.0 | Maximum random noise in pixels (±noise) added to clicks |
+| `--frequency` | 200.0 | Emission frequency in Hz |
+| `--devices` | 1 | Number of mock devices (1-3). Uses left/right/middle mouse buttons |
+| `--auto-label-surface` | false | Auto-label surfaces using their IDs (no prompt) |
 
 ### Test Commands
 
