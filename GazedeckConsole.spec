@@ -25,7 +25,30 @@ a = Analysis(
         'pynput',
         'zeroconf',
         'zeroconf._utils.ipaddress',
-        'zeroconf._handlers.answers'
+        'zeroconf._handlers.answers',
+        # Additional imports for ctypes and system compatibility
+        'ctypes',
+        'ctypes.wintypes',
+        '_ctypes',
+        'ifaddr',
+        'ifaddr._shared',
+        # Network and system modules
+        'socket',
+        'ssl',
+        'urllib',
+        'urllib.parse',
+        'http',
+        # Asyncio and related modules
+        'asyncio',
+        'asyncio.windows_events',
+        'asyncio.windows_utils',
+        # Additional modules that might be needed
+        'encodings.idna',
+        'encodings.cp1252',
+        'multiprocessing',
+        'concurrent.futures',
+        'queue',
+        'threading'
     ],
     hookspath=[],
     hooksconfig={},
