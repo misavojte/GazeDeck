@@ -56,6 +56,13 @@ Or install dependencies manually:
 pip install pupil-labs-realtime-api==1.6.2 websockets>=12.0 opencv-python>=4.8.0 PyYAML>=6.0
 ```
 
+## Console Application (Standalone Executable)
+
+The `build_console_app.py` script automatically detects your platform and configures the build accordingly:
+
+- **macOS**: Uses `.dylib` files from `libapriltag*.dylib`
+- **Windows**: Uses `.dll` files from `apriltag.dll`
+
 ## Quick Start
 
 1. **Generate Surface Layout**:
