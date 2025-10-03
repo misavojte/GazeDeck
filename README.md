@@ -31,7 +31,7 @@ GazeDeck supports two device discovery modes:
 
 mDNS discovery works on most standard WiFi networks but may fail on mobile hotspots or networks that block multicast traffic. In such cases, use direct IP connections for reliable device connectivity.
 
-### Virtual Environment
+### Development Setup (Virtual Environment)
 
 Create and activate a virtual environment:
 
@@ -50,18 +50,48 @@ Install the package and its dependencies:
 pip install -e .
 ```
 
-Or install dependencies manually:
+Or install dependencies manually (recommended minimal set for building):
 
 ```bash
-pip install pupil-labs-realtime-api==1.6.2 websockets>=12.0 opencv-python>=4.8.0 PyYAML>=6.0
+pip install pupil-labs-realtime-api==1.6.2 websockets>=12.0 opencv-python>=4.8.0 PyYAML>=6.0 nuitka
 ```
 
 ## Console Application (Standalone Executable)
 
-The `build_console_app.py` script automatically detects your platform and configures the build accordingly:
+This project now uses Nuitka exclusively to build the standalone console application.
 
-- **macOS**: Uses `.dylib` files from `libapriltag*.dylib`
-- **Windows**: Uses `.dll` files from `apriltag.dll`
+### Build (Nuitka only)
+
+```bash
+python build_nuitka.py
+```
+
+Artifacts are created in `dist_nuitka/`:
+- `console_app.app` (macOS app bundle)
+- `GazeDeckConsole.command` (double-click to open Terminal and run the app)
+
+### Run (macOS)
+
+```bash
+# Double-clickable Terminal launcher
+open dist_nuitka/GazeDeckConsole.command
+
+# Or run the compiled binary directly
+./dist_nuitka/console_app.app/Contents/MacOS/GazedeckConsole
+
+# Or open the app bundle (Finder launches it)
+open dist_nuitka/console_app.app
+```
+
+### Run (Windows)
+
+After building on Windows:
+
+```powershell
+dist_nuitka\GazedeckConsole.exe --help
+```
+
+Double-click `dist_nuitka\GazedeckConsole.exe` to launch the console.
 
 ## Quick Start
 
@@ -199,7 +229,7 @@ python -m gazedeck stream --cv
 
 The visualization works with the original distorted camera coordinates, ensuring accurate overlay on the live video feed. WebSocket streaming continues normally even with CV visualization enabled.
 
-### Generated Files Structure
+### Generated Files Structure (Surface Layouts)
 
 After generating a surface layout, you'll find:
 
