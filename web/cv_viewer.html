@@ -1,0 +1,99 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>GazeDeck CV Viewer</title>
+<style>
+  html, body { height: 100%; margin: 0; background: #111; color: #ddd; font-family: system-ui, sans-serif; }
+  #wrap { display: flex; flex-direction: column; height: 100%; }
+  header { padding: 8px 12px; background: #1b1b1b; border-bottom: 1px solid #333; }
+  #status { font-size: 12px; opacity: 0.8; }
+  #content { flex: 1; display: grid; place-items: center; }
+  img { max-width: 98vw; max-height: 92vh; image-rendering: -webkit-optimize-contrast; border: 1px solid #333; }
+  #debug { font-size: 10px; opacity: 0.6; margin-top: 4px; }
+</style>
+<div id="wrap">
+  <header>
+    <div>GazeDeck CV Viewer</div>
+    <div id="status">Connecting...</div>
+    <div id="debug">Frames: 0 | Size: -</div>
+  </header>
+  <div id="content">
+    <img id="frame" alt="video">
+  </div>
+</div>
+<script>
+  const statusEl = document.getElementById('status');
+  const debugEl = document.getElementById('debug');
+  const imgEl = document.getElementById('frame');
+
+  const p = new URLSearchParams(location.search);
+  const host = p.get('host') || 'localhost';
+  const port = p.get('port') || '8765';
+  const device = p.get('device') || '0';
+  const url = `ws://${host}:${port}/fpv/${device}`;
+
+  let ws, lastURL, frameCount = 0;
+
+  function connect() {
+    ws = new WebSocket(url);
+    ws.binaryType = 'blob';
+
+    ws.onopen = () => {
+      statusEl.textContent = `Connected to ${url}`;
+      frameCount = 0;
+    };
+    
+    ws.onmessage = (evt) => {
+      frameCount++;
+      const size = evt.data.size || evt.data.byteLength || 'unknown';
+      
+      // Convert blob to base64 data URL (more reliable than blob URLs)
+      if (evt.data instanceof Blob) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          const bytes = new Uint8Array(e.target.result);
+          const isValidJPEG = bytes.length >= 2 && bytes[0] === 0xFF && bytes[1] === 0xD8;
+          
+          // Debug: show first few bytes
+          const firstBytes = Array.from(bytes.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join(' ');
+          
+          debugEl.textContent = `Frames: ${frameCount} | Size: ${size} bytes | Valid JPEG: ${isValidJPEG} | First bytes: ${firstBytes}`;
+          
+          if (isValidJPEG) {
+            // Create base64 data URL
+            const base64 = btoa(String.fromCharCode.apply(null, bytes));
+            const dataURL = `data:image/jpeg;base64,${base64}`;
+            
+            imgEl.onload = () => {
+              debugEl.textContent += ` | ${imgEl.naturalWidth}x${imgEl.naturalHeight}`;
+            };
+            imgEl.onerror = () => {
+              debugEl.textContent += ' | ERROR loading image';
+            };
+            
+            imgEl.src = dataURL;
+          } else {
+            debugEl.textContent += ' | INVALID JPEG DATA';
+          }
+        };
+        reader.onerror = function() {
+          debugEl.textContent += ' | ERROR reading blob';
+        };
+        reader.readAsArrayBuffer(evt.data);
+      } else {
+        debugEl.textContent = `Frames: ${frameCount} | Size: ${size} bytes | Type: ${typeof evt.data}`;
+      }
+    };
+    
+    ws.onclose = () => { 
+      statusEl.textContent = 'Disconnected. Reconnecting in 1s...'; 
+      setTimeout(connect, 1000); 
+    };
+    
+    ws.onerror = (e) => { 
+      statusEl.textContent = `Error: ${e.type}. Reconnecting in 1s...`; 
+      try { ws.close(); } catch {} 
+    };
+  }
+  
+  connect();
+</script>

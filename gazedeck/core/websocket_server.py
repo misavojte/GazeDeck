@@ -53,7 +53,9 @@ class WebSocketServer:
         """
         self.host = host
         self.port = port
-        self._clients: Set[asyncio.Queue] = set()
+        # Per-path client queues; isolates traffic by path (e.g., "/", "/video/1")
+        self._clients_by_path: dict[str, set[asyncio.Queue]] = {}
+        # Global broadcast queue carrying (path, bytes)
         self._broadcast_q: asyncio.Queue = asyncio.Queue(maxsize=BROADCAST_QUEUE_MAX)
         self._client_lock: asyncio.Lock = asyncio.Lock()
         self._server: Optional[websockets.server.Serve] = None
@@ -62,31 +64,49 @@ class WebSocketServer:
     
     async def _client_handler(self, ws: WebSocketServerProtocol) -> None:
         """
-        Handle individual client connections.
+        Handle individual client connections with path-based routing.
         
-        Why separate queue per client:
-        - Prevents head-of-line blocking between clients
-        - Allows dropping slow clients without affecting others
-        - Enables parallel message distribution
+        Routes:
+        - /: gaze data (root path)
+        - /fpv/{deviceId}: video data for specific device
         """
+        # Get the request path - this is the KEY fix
+        path = ws.request.path if hasattr(ws, 'request') and hasattr(ws.request, 'path') else "/"
+        
+        # Route to appropriate handler
+        if path == "/":
+            await self._handle_client(ws, path)
+        elif path.startswith("/fpv/"):
+            await self._handle_client(ws, path)
+        else:
+            print(f"[WARN] Unknown path {path}, closing connection")
+            await ws.close(1008, "Unknown path")
+    
+    async def _handle_client(self, ws: WebSocketServerProtocol, path: str) -> None:
+        """Handle a client on a specific path."""
         q: asyncio.Queue = asyncio.Queue(maxsize=CLIENT_QUEUE_MAX)
         async with self._client_lock:
-            self._clients.add(q)
+            if path not in self._clients_by_path:
+                self._clients_by_path[path] = set()
+            self._clients_by_path[path].add(q)
         try:
             while True:
                 msg = await q.get()
-                await ws.send(msg)  # str or bytes
+                await ws.send(msg)
         except Exception:
-            # ConnectionClosed or any send error → drop client
-            # No logging here to avoid high-frequency output
             pass
         finally:
             async with self._client_lock:
-                self._clients.discard(q)
+                try:
+                    self._clients_by_path.get(path, set()).discard(q)
+                    if not self._clients_by_path.get(path):
+                        self._clients_by_path.pop(path, None)
+                except Exception:
+                    pass
     
     async def _broadcaster(self) -> None:
         """
-        Distribute messages from broadcast queue to all client queues.
+        Distribute messages from broadcast queue to all client queues for the target path.
         
         Why parallel distribution:
         - Maximizes throughput by sending to all clients simultaneously
@@ -95,15 +115,15 @@ class WebSocketServer:
         """
         try:
             while True:
-                msg = await self._broadcast_q.get()
-                # Parallel fan-out: send to all clients simultaneously
+                path, msg = await self._broadcast_q.get()
                 async with self._client_lock:
-                    client_queues = self._clients.copy()
+                    client_queues = self._clients_by_path.get(path, set()).copy()
                 if client_queues:  # Only create tasks if we have clients
                     tasks = []
                     for q in client_queues:
                         tasks.append(self._send_to_client(q, msg))
                     await asyncio.gather(*tasks, return_exceptions=True)
+                # No clients on this path - messages are dropped (normal for high-frequency data)
         except asyncio.CancelledError:
             # Expected during shutdown - no logging needed
             pass
@@ -191,7 +211,7 @@ class WebSocketServer:
         - Prevents memory leaks from accumulated state
         - Enables proper resource cleanup
         """
-        self._clients.clear()
+        self._clients_by_path.clear()
         
         # Clear the broadcast queue
         while not self._broadcast_q.empty():
@@ -203,20 +223,19 @@ class WebSocketServer:
         # Reset the client lock
         self._client_lock = asyncio.Lock()
     
-    def broadcast_nowait(self, msg: str | bytes) -> None:
+    def broadcast_nowait(self, msg: str | bytes, path: str = "/") -> None:
         """
-        Fast-path message broadcast.
+        Fast-path message broadcast to a specific path.
         
-        Why non-blocking broadcast:
-        - Prevents blocking the event loop
-        - Maintains high-frequency performance
-        - Implements backpressure by dropping messages when full
+        Args:
+            msg: Message to broadcast (str or bytes)
+            path: WebSocket path to broadcast to (e.g., "/", "/fpv/0", "/fpv/1")
         """
         if not self._is_running:
             return
         
         try:
-            self._broadcast_q.put_nowait(msg)
+            self._broadcast_q.put_nowait((path, msg))
         except asyncio.QueueFull:
             # Drop message to prevent blocking - maintains performance
             pass
@@ -248,4 +267,4 @@ class WebSocketServer:
     @property
     def client_count(self) -> int:
         """Get the current number of connected clients."""
-        return len(self._clients)
+        return sum(len(clients) for clients in self._clients_by_path.values())

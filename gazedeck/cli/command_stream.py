@@ -171,8 +171,9 @@ async def execute_stream(args: argparse.Namespace):
         print("[ERR] No labeled devices found. Please discover and label at least one device first.")
         return
 
-    # Create and start WebSocket server
+    # Create and start WebSocket server with path-based routing
     print("[INIT] Starting WebSocket server on ws://localhost:8765")
+    print("[INFO] Routes: / (gaze), /fpv/{deviceId} (video)")
     ws_server = WebSocketServer(host="localhost", port=8765)
     await ws_server.start()
 
@@ -209,9 +210,10 @@ async def execute_stream(args: argparse.Namespace):
                 print("[WARN] CV visualization currently supports single device only. Using first device.")
             first_device = next(iter(labeled_devices.values()))
             cv_task = asyncio.create_task(
-                stream_cv_visualization(first_device, labeled_surface_layouts, apriltag_params, layouts, shutdown_event)
+                stream_cv_visualization(first_device, labeled_surface_layouts, apriltag_params, layouts, shutdown_event, ws_server)
             )
             stream_tasks.append(cv_task)
+            print(f"[INFO] CV video available at ws://localhost:8765/fpv/{first_device.emission_id}")
 
         print("All streams started")
         print("Press Ctrl+C to stop the streams")
@@ -339,16 +341,16 @@ async def stream_gaze_mapped_data_to_ws(labeled_device: LabeledDevice, labeled_s
         raise
 
 
-async def stream_cv_visualization(labeled_device: LabeledDevice, labeled_surface_layouts: Dict[int, SurfaceLayoutLabeled], apriltag_params: Dict[str, Any], surface_layouts: Dict[int, SurfaceLayout], shutdown_event: asyncio.Event):
+async def stream_cv_visualization(labeled_device: LabeledDevice, labeled_surface_layouts: Dict[int, SurfaceLayoutLabeled], apriltag_params: Dict[str, Any], surface_layouts: Dict[int, SurfaceLayout], shutdown_event: asyncio.Event, ws_server: WebSocketServer):
     """
-    CV visualization with proper async patterns and graceful shutdown.
-    
-    Uses asyncio.Event for async coordination, proper exception handling
-    and resource cleanup, better integration with asyncio task management,
-    and maintains performance optimizations.
+    HighGUI-free CV visualization:
+    - Detect AprilTags on device video
+    - Overlay with draw_tag_visualization
+    - JPEG-encode and broadcast over WebSocket on path /video/{deviceEmissionId}
     """
-    import threading
-    from gazedeck.core.cv_visualizer import CVVisualizer
+    import cv2
+    import contextlib
+    from gazedeck.core.cv_visualizer import draw_tag_visualization
     from gazedeck.core.camera_distortion import CameraDistortion
     from gazedeck.core.device_senzors import get_sensor_urls
     from gazedeck.core.queues import get_most_recent_item
@@ -358,19 +360,12 @@ async def stream_cv_visualization(labeled_device: LabeledDevice, labeled_surface
     from pupil_labs.realtime_api.streaming import VideoFrame
 
     try:
-        print(f"[INIT] Starting CV visualization for device: {labeled_device.emission_id} {labeled_device.label}")
-        print("[INFO] Press ESC to stop visualization")
+        device_path = f"/video/{labeled_device.emission_id}"
+        print(f"[INIT] Starting CV stream at ws://{ws_server.host}:{ws_server.port}{device_path} for device: {labeled_device.emission_id} {labeled_device.label}")
 
-        # Get sensor URLs
         _, sensor_video_url, _ = await get_sensor_urls(labeled_device)
 
-        # Initialize lightweight video queue (smaller for CV)
-        MAX_QUEUE_VIDEO_SIZE = 3  # Smaller queue for faster processing
-        queue_video: asyncio.Queue[VideoFrame] = asyncio.Queue(maxsize=MAX_QUEUE_VIDEO_SIZE)
-
-        # Use the passed shutdown_event for coordination
-
-        # Start video collection task with shutdown support
+        queue_video: asyncio.Queue[VideoFrame] = asyncio.Queue(maxsize=3)
         video_task = asyncio.create_task(
             enqueue_sensor_data(
                 receive_video_frames(sensor_video_url, run_loop=True),
@@ -380,137 +375,56 @@ async def stream_cv_visualization(labeled_device: LabeledDevice, labeled_surface
             )
         )
 
-        # Initialize lightweight components for CV only
         camera_distortion = CameraDistortion(labeled_device.camera_calibration)
         detector = SimpleMarkerDetector(apriltag_params)
 
-        # Thread-safe queue for passing frames to GUI thread
-        frame_queue: queue.Queue = queue.Queue(maxsize=2)  # Small queue to prevent memory buildup
-        stop_event = threading.Event()  # Still use threading.Event for GUI thread coordination
-
-        print("[INIT] Starting CV visualization loop...")
-
-        def gui_thread():
-            """Separate thread for all OpenCV GUI operations - completely non-blocking."""
-            visualizer = CVVisualizer()
-
-            try:
-                while not stop_event.is_set():
-                    try:
-                        # Non-blocking frame retrieval with timeout
-                        frame_data = frame_queue.get(timeout=0.1)
-
-                        if frame_data is None:  # Sentinel value to stop
-                            break
-
-                        frame_bgr, detected_markers = frame_data
-
-                        # Show visualization in GUI thread (blocking is OK here)
-                        visualizer.show_frame(frame_bgr, detected_markers)
-
-                        # Check for ESC key in GUI thread
-                        if visualizer.should_close():
-                            print("[STOP] Closing CV visualization")
-                            break
-
-                    except queue.Empty:
-                        # No new frames, continue GUI event loop
-                        continue
-                    except Exception as e:
-                        print(f"[WARN] GUI thread error: {e}")
-                        break
-
-            finally:
-                visualizer.cleanup()
-
-        # Start GUI thread
-        gui_thread_instance = threading.Thread(target=gui_thread, daemon=True, name=f"CV-GUI-{labeled_device.emission_id}")
-        gui_thread_instance.start()
-
-        frame_count = 0
+        frame_idx = 0
         try:
             while not shutdown_event.is_set():
                 try:
-                    # Get latest video frame (non-blocking with timeout)
                     _, video_frame = await get_most_recent_item(queue_video, timeout=0.1)
-
-                    frame_count += 1
-
-                    # Process every 2nd frame to reduce CPU load (15 FPS instead of 30)
-                    if frame_count % 2 != 0:
-                        continue
-
-                    # Get frame data for visualization
-                    if hasattr(video_frame, 'bgr_pixels'):
-                        frame_bgr = video_frame.bgr_pixels
-                    elif hasattr(video_frame, 'bgr_buffer'):
-                        frame_bgr = video_frame.bgr_buffer()
-                    else:
-                        continue
-
-                    # Lightweight marker detection for visualization only (in thread pool)
-                    detected_markers = await asyncio.to_thread(
-                        detector.detect_markers, frame_bgr, camera_distortion
-                    )
-
-                    # Put frame in GUI queue (non-blocking)
-                    try:
-                        # Remove old frame if queue is full
-                        while frame_queue.full():
-                            try:
-                                frame_queue.get_nowait()
-                            except queue.Empty:
-                                break
-
-                        frame_queue.put_nowait((frame_bgr, detected_markers))
-                    except queue.Full:
-                        # Drop frame if queue is full (maintains performance)
-                        pass
-
                 except asyncio.TimeoutError:
-                    # No new frame available, continue processing
-                    pass
-                except asyncio.CancelledError:
-                    print("[STOP] CV visualization cancelled")
-                    break
-                except Exception as e:
-                    print(f"[WARN] CV frame processing error: {e}")
+                    continue
 
-                # Small sleep to prevent busy waiting
-                await asyncio.sleep(0.01)  # Very short sleep for responsiveness
+                frame_idx += 1
+                if frame_idx % 2 != 0:
+                    continue  # ~15 FPS
 
+                if hasattr(video_frame, "bgr_pixels"):
+                    frame_bgr = video_frame.bgr_pixels
+                elif hasattr(video_frame, "bgr_buffer"):
+                    frame_bgr = video_frame.bgr_buffer()
+                else:
+                    continue
+
+                detected_markers = await asyncio.to_thread(
+                    detector.detect_markers, frame_bgr, camera_distortion
+                )
+
+                vis_frame = draw_tag_visualization(frame_bgr, detected_markers)
+
+                # JPEG encode and broadcast
+                ok, buf = cv2.imencode(".jpg", vis_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+                if ok and buf is not None and len(buf) > 0:
+                    jpeg_bytes = buf.tobytes()
+                    fpv_path = f"/fpv/{labeled_device.emission_id}"
+                    ws_server.broadcast_nowait(jpeg_bytes, path=fpv_path)
+
+                await asyncio.sleep(0.005)
         finally:
-            # Graceful shutdown sequence
-            print("[CLEAN] Cleaning up CV visualization...")
-            
-            # Signal async tasks to stop
             shutdown_event.set()
-            
-            # Cancel video task
             if not video_task.done():
                 video_task.cancel()
-                try:
+                with contextlib.suppress(asyncio.CancelledError, asyncio.TimeoutError):
                     await asyncio.wait_for(video_task, timeout=1.0)
-                except (asyncio.CancelledError, asyncio.TimeoutError):
-                    pass
-            
-            # Signal GUI thread to stop
-            stop_event.set()
-            try:
-                frame_queue.put(None, timeout=0.5)  # Sentinel value
-            except queue.Full:
-                pass
-
-            # Wait for GUI thread to finish
-            gui_thread_instance.join(timeout=1.0)
 
     except asyncio.CancelledError:
-        print(f"[STOP] CV visualization cancelled for device {labeled_device.emission_id}")
+        print(f"[STOP] CV JPEG stream cancelled for device {labeled_device.emission_id}")
         raise
     except Exception as e:
         import traceback
         traceback.print_exc()
-        print(f"[ERR] Unexpected error in CV visualization: {e}")
+        print(f"[ERR] Unexpected error in CV JPEG stream: {e}")
         raise
 
 
