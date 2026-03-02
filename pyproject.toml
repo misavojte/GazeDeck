@@ -7,7 +7,7 @@ name = "gaze-deck"
 version = "0.1.0"
 description = "Real-time screen gaze tracking with Pupil Labs"
 dependencies = [
-    "pupil-labs-realtime-api==1.6.2",
+    "pupil-labs-realtime-api>=1.8.0",
     "websockets>=12.0,<16.0",
     "opencv-python>=4.8.0",
     "PyYAML>=6.0",

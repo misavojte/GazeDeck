@@ -2,7 +2,7 @@
 
 # pupil labs realtime api
 from pupil_labs.neon_recording.calib import Calibration
-from pupil_labs.realtime_api.streaming import GazeData
+
 from pupil_labs.realtime_api import (
     VideoFrame,
     receive_gaze_data,
@@ -49,7 +49,7 @@ async def create_streaming_context(labeled_device: LabeledDevice, surface_layout
     
     # Create queues with proper sizing for real-time processing
     queue_video: asyncio.Queue[VideoFrame] = asyncio.Queue(maxsize=MAX_QUEUE_VIDEO_SIZE)
-    queue_gaze: asyncio.Queue[GazeData] = asyncio.Queue(maxsize=MAX_QUEUE_GAZE_SIZE)
+    queue_gaze: asyncio.Queue[Any] = asyncio.Queue(maxsize=MAX_QUEUE_GAZE_SIZE)
     queue_result: asyncio.Queue[GazeMappedResult] = asyncio.Queue(maxsize=MAX_QUEUE_RESULT_SIZE)
     
     # Shutdown coordination using asyncio.Event (not threading.Event)
@@ -155,7 +155,7 @@ async def enqueue_sensor_data(sensor_stream, queue: asyncio.Queue, shutdown_even
         raise
 
 
-async def match_and_map_gaze(queue_video: asyncio.Queue[VideoFrame], queue_gaze: asyncio.Queue[GazeData], output_queue: asyncio.Queue[GazeMappedResult], camera_distortion: dict, surface_layouts: Dict[int, SurfaceLayoutLabeled], apriltag_params: Dict[str, Any], gaze_filter_alpha: float, shutdown_event: asyncio.Event) -> None:
+async def match_and_map_gaze(queue_video: asyncio.Queue[VideoFrame], queue_gaze: asyncio.Queue[Any], output_queue: asyncio.Queue[GazeMappedResult], camera_distortion: dict, surface_layouts: Dict[int, SurfaceLayoutLabeled], apriltag_params: Dict[str, Any], gaze_filter_alpha: float, shutdown_event: asyncio.Event) -> None:
     """
     Gaze mapping with proper async patterns and graceful shutdown.
     

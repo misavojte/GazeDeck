@@ -3,7 +3,7 @@
 
 import numpy as np
 from typing import Dict, List, NamedTuple, Optional, Any
-from pupil_labs.realtime_api import GazeData
+
 from pupil_labs.realtime_api.streaming import VideoFrame
 
 from .camera_distortion import CameraDistortion
@@ -15,7 +15,7 @@ class SimpleMappedGaze(NamedTuple):
     surface_id: int  # emission_id
     x: float
     y: float
-    base_datum: GazeData
+    base_datum: Any
 
 class SimpleMapperResult(NamedTuple):
     """Simple gaze mapping result"""
@@ -85,7 +85,7 @@ class GazeMapper:
         # Track surfaces using CV2 homography
         self._surface_locations = track_surfaces(detected_markers, self._surfaces, source_frame_timestamp)
 
-    def process_gaze(self, gaze: GazeData) -> SimpleMapperResult:
+    def process_gaze(self, gaze: Any) -> SimpleMapperResult:
         """
         Process gaze data using latest surface locations.
 
